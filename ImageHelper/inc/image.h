@@ -20,7 +20,7 @@ inline bool operator==(const rgb &a, const rgb &b) {
 }
 
 inline rgb operator-(const rgb &a, const rgb &b) {
-	rgb retval;
+	rgb retval{};
 	retval.r=(uchar)((int)a.r-(int)b.r+127);
 	retval.g=(uchar)((int)a.g-(int)b.g+127);
 	retval.b=(uchar)((int)a.b-(int)b.b+127);

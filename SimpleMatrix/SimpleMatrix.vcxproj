@@ -19,12 +19,14 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="inc\covariance.h" />
     <ClInclude Include="inc\framework.h" />
     <ClInclude Include="inc\mathmatrix.h" />
     <ClInclude Include="inc\mathvector.h" />
     <ClInclude Include="inc\symmeigen.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\covariance.cpp" />
     <ClCompile Include="src\mathmatrix.cpp" />
     <ClCompile Include="src\mathvector.cpp" />
     <ClCompile Include="src\symmeigen.cpp" />
