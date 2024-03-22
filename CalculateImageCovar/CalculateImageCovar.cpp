@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
     std::string outputFile(argv[4]);
     std::cout << std::format("running with patch size={}x{} sampled {} times from each image in '{}' and output to '{}'", N, N, patchesPerImage, sourceFolder, outputFile) << std::endl;
     if (argc == 6) {
-        std::cout << std::format("also writing covariance as greyscale image to {}", argv[5]);
+        std::cout << std::format("also writing covariance as greyscale image to {}", argv[5]) << std::endl;
     }
     Startup();
     const auto files = readFiles(sourceFolder);
@@ -49,11 +49,12 @@ int main(int argc, char* argv[]) {
     math::Vector patch(N * N);
     std::mt19937 rand;
     rand.seed(123456);
-    for (const auto& file : files) {
+    for (int count = 0; count < files.size(); ++count) {
+        std::string file = files[count];
         std::string lowerCaseName(file.size(), 0);
         transform(file.cbegin(), file.cend(), lowerCaseName.begin(), ::tolower);
         if (lowerCaseName.ends_with(".jpg")) {
-            std::cout << "processing: " << file << std::endl;
+            std::cout << std::format("processing: {} {}%", file, (100 * count)/files.size()) << std::endl;
             imgFormat format;
             image<rgb>* image = LoadImageGenericRGB(file.c_str(), &format);
             if (image->width() < N || image->height() < N) {
