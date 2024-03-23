@@ -49,12 +49,12 @@ int main(int argc, char* argv[]) {
     math::Vector patch(N * N);
     std::mt19937 rand;
     rand.seed(123456);
-    for (int count = 0; count < files.size(); ++count) {
+    for (size_t count = 0; count < files.size(); ++count) {
         std::string file = files[count];
         std::string lowerCaseName(file.size(), 0);
         transform(file.cbegin(), file.cend(), lowerCaseName.begin(), ::tolower);
         if (lowerCaseName.ends_with(".jpg")) {
-            std::cout << std::format("processing: {} {}%", file, (100 * count)/files.size()) << std::endl;
+            std::cout << std::format("processing: {} {}%", file, (100L * count)/files.size()) << std::endl;
             imgFormat format;
             image<rgb>* image = LoadImageGenericRGB(file.c_str(), &format);
             if (image->width() < N || image->height() < N) {
