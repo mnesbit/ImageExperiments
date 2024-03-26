@@ -195,7 +195,7 @@ double Vector::DotProduct(const Vector& right)
 }
 
 
-void Vector::Save(const char* filename)
+void Vector::Save(const char* filename) const
 {
 	std::ofstream file(filename, std::ios::out | std::ios::binary);
 	if(file)

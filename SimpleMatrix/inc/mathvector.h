@@ -35,7 +35,7 @@ public:
 	double Magnitude();
 	double SquaredMagnitude();
 	double DotProduct(const Vector& right);
-	void Save(const char* filename);
+	void Save(const char* filename) const;
 	void Load(const char* filename);
 	void Reset();
 private:

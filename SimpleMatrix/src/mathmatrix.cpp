@@ -307,7 +307,7 @@ Matrix Matrix::GetSquare()const
 	return result;
 }
 
-void Matrix::Save(const char* filename)
+void Matrix::Save(const char* filename) const
 {
 	std::ofstream file(filename, std::ios::out | std::ios::binary);
 	if(file)

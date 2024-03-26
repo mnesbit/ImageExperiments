@@ -57,7 +57,7 @@ public:
 	void Scale(double scaling);
 	void AddConstant(double constant);
 	Matrix GetSquare()const;
-	void Save(const char* filename);
+	void Save(const char* filename) const;
 	void Load(const char* filename);
 	void Reset();
 private:

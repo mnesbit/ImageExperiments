@@ -229,8 +229,12 @@ void particleSwarm(int dims, int particles, int iterations, std::function<double
 }
 
 int main(int argc, char* argv[]) {
+	if (argc != 2) {
+		std::cout << "usage: FitCovarianceModel.exe <input matrix file name>" << std::endl;
+		return - 1;
+	}
 	math::Matrix covar;
-	covar.Load("D:\\Treasure\\Cpp\\ImageExperiments\\Data\\covar65x65.mat");
+	covar.Load(argv[1]);
 	const int N = static_cast<int>(sqrt(covar.Rows()));
 	if (covar.Rows() != N * N || covar.Columns() != N * N) {
 		std::cout << "expected square covariance matrix" << std::endl;
