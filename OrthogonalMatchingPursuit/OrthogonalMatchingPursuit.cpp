@@ -27,14 +27,14 @@ double Select(const math::Vector& residual, const math::Matrix& dictionary, math
 	double bestCoeff = 0.0;
 	math::Vector proj = Multiply(dictionary, residual);
 	double* pData = proj.Data();
-	int N = proj.Length();
-	for (int i = 0; i < N; ++i)
+	size_t N = proj.Length();
+	for (size_t i = 0; i < N; ++i)
 	{
 		double value = *pData++;
 		if (abs(value) > abs(bestCoeff))
 		{
 			bestCoeff = value;
-			index = i;
+			index = static_cast<int>(i);
 		}
 	}
 	if (index != -1)
@@ -46,7 +46,7 @@ double Select(const math::Vector& residual, const math::Matrix& dictionary, math
 
 double CalcOMPStatic(int K, BasisChoice results[], const math::Vector& input, const math::Matrix& dictionary)
 {
-	int N = input.Length();
+	size_t N = input.Length();
 	math::Vector residual(input);
 	math::Vector newEntry(N);
 	math::Matrix Q(N, K);
@@ -104,7 +104,7 @@ double CalcOMPStatic(int K, BasisChoice results[], const math::Vector& input, co
 
 double CalcOMPDynamic(int K, BasisChoice results[], const math::Vector& input, DynamicDictionaryFunction dynamicDictionary)
 {
-	int N = input.Length();
+	size_t N = input.Length();
 	math::Vector residual(input);
 	math::Vector newEntry(N);
 	math::Matrix Q(N, K);
@@ -162,7 +162,7 @@ double CalcOMPDynamic(int K, BasisChoice results[], const math::Vector& input, D
 }
 
 math::Vector FromCoeffsStatic(int K, const BasisChoice coeffs[], const math::Matrix& dictionary) {
-	int N = dictionary.Columns();
+	size_t N = dictionary.Columns();
 	math::Vector results(dictionary.Columns());
 	for (int i = 0; i < K; ++i) {
 		if (coeffs[i].basisID >= 0 && coeffs[i].coeff != 0.0) {
@@ -177,7 +177,7 @@ math::Vector FromCoeffsStatic(int K, const BasisChoice coeffs[], const math::Mat
 
 math::Vector FromCoeffsDynamic(int K, const BasisChoice coeffs[], DynamicDictionaryFunction dynamicDictionary) {
 	math::Matrix dictionary = dynamicDictionary(K, coeffs);
-	int N = dictionary.Columns();
+	size_t N = dictionary.Columns();
 	math::Vector results(dictionary.Columns());
 	for (int i = 0; i < K; ++i) {
 		if (coeffs[i].basisID >= 0 && coeffs[i].coeff != 0.0) {
@@ -274,7 +274,7 @@ math::Matrix createKLTDictionary(int blockSize) {
 typedef struct Pt_Tag
 {
 	int x, y;
-}Pt;
+} Pt;
 
 static int Area(Pt& a, Pt& b, Pt& c)
 {
@@ -286,31 +286,23 @@ std::vector<std::vector<bool> > distinctLineShapes(int blockSize) {
 	basisSet.insert(std::vector<bool>(blockSize * blockSize, true)); //dc basis
 	for (int side1 = -1; side1 < blockSize + 1; ++side1)
 	{
-		Pt s1;
-		s1.x = side1;
-		s1.y = 0;
+		Pt s1 = { .x = side1, .y = 0 };
 		for (int side2 = -1; side2 < blockSize + 1; ++side2)
 		{
-			Pt s2a, s2b, s2c;
-			s2a.x = 0;
-			s2a.y = side2;
-			s2b.x = side2;
-			s2b.y = blockSize - 1;
-			s2c.x = blockSize - 1;
-			s2c.y = side2;
+			Pt s2a = { .x = 0, .y = static_cast<int>(side2) };
+			Pt s2b = { .x = static_cast<int>(side2), .y = blockSize - 1 };
+			Pt s2c = { .x = blockSize - 1, .y = static_cast<int>(side2) };
 			std::vector<bool> bits1(blockSize * blockSize);
 			std::vector<bool> invbits1(blockSize * blockSize);
 			std::vector<bool> bits2(blockSize * blockSize);
 			std::vector<bool> invbits2(blockSize * blockSize);
 			std::vector<bool> bits3(blockSize * blockSize);
 			std::vector<bool> invbits3(blockSize * blockSize);
-			for (int x = 0; x < blockSize; ++x)
+			for (size_t x = 0; x < blockSize; ++x)
 			{
-				for (int y = 0; y < blockSize; ++y)
+				for (size_t y = 0; y < blockSize; ++y)
 				{
-					Pt s3;
-					s3.x = x;
-					s3.y = y;
+					Pt s3 = { .x = static_cast<int>(x), .y = static_cast<int>(y) };
 					bits1[x + y * blockSize] = (Area(s1, s2a, s3) > 0);
 					invbits1[x + y * blockSize] = !bits1[x + y * blockSize];
 					bits2[x + y * blockSize] = (Area(s1, s2b, s3) > 0);
@@ -335,31 +327,23 @@ std::vector<std::vector<bool> > distinctLineShapes(int blockSize) {
 	}
 	for (int side1 = -1; side1 < blockSize + 1; ++side1)
 	{
-		Pt s1;
-		s1.x = blockSize - 1;
-		s1.y = side1;
+		Pt s1 = { .x = blockSize - 1 , .y = side1 };
 		for (int side2 = -1; side2 < blockSize + 1; ++side2)
 		{
-			Pt s2a, s2b, s2c;
-			s2a.x = 0;
-			s2a.y = side2;
-			s2b.x = side2;
-			s2b.y = blockSize - 1;
-			s2c.x = 0;
-			s2c.y = side1;
+			Pt s2a = { .x = 0, .y = static_cast<int>(side2) };
+			Pt s2b = { .x = static_cast<int>(side2), .y = blockSize - 1 };
+			Pt s2c = { .x = 0, .y = side1 };
 			std::vector<bool> bits1(blockSize * blockSize);
 			std::vector<bool> invbits1(blockSize * blockSize);
 			std::vector<bool> bits2(blockSize * blockSize);
 			std::vector<bool> invbits2(blockSize * blockSize);
 			std::vector<bool> bits3(blockSize * blockSize);
 			std::vector<bool> invbits3(blockSize * blockSize);
-			for (int x = 0; x < blockSize; x++)
+			for (size_t x = 0; x < blockSize; x++)
 			{
-				for (int y = 0; y < blockSize; y++)
+				for (size_t y = 0; y < blockSize; y++)
 				{
-					Pt s3;
-					s3.x = x;
-					s3.y = y;
+					Pt s3{ .x = static_cast<int>(x), .y = static_cast<int>(y) };
 					bits1[x + y * blockSize] = (Area(s1, s2a, s3) > 0);
 					invbits1[x + y * blockSize] = !bits1[x + y * blockSize];
 					bits2[x + y * blockSize] = (Area(s1, s2b, s3) > 0);
@@ -394,12 +378,12 @@ static const double s_blurKernel[9]{
 math::Matrix createSegmentDictionary(int blockSize, std::vector<std::vector<bool> > basisSet) {
 	math::Matrix dictionary(basisSet.size(), blockSize * blockSize);
 	int i = 0;
-	for (const auto bits: basisSet) {
+	for (const std::vector<bool>& bits: basisSet) {
 		double total = 0.0;
 		bool allSet = true;
 		bool allClear = true;
 		math::Vector base(blockSize * blockSize);
-		for (int j = 0; j < blockSize * blockSize; ++j) {
+		for (size_t j = 0; j < blockSize * blockSize; ++j) {
 			if (bits[j]) {
 				base[j] = +1.0;
 				allClear = false;
@@ -412,9 +396,9 @@ math::Matrix createSegmentDictionary(int blockSize, std::vector<std::vector<bool
 			for (int y = 0; y < blockSize; ++y) {
 				double accum = 0.0;
 				for (int dx = -1; dx < +1; ++dx) {
-					int u = std::clamp(x + dx, 0, blockSize - 1);
+					size_t u = std::clamp(x + dx, 0, blockSize - 1);
 					for (int dy = -1; dy < +1; ++dy) {
-						int v = std::clamp(y + dy, 0, blockSize - 1);
+						size_t v = std::clamp(y + dy, 0, blockSize - 1);
 						accum += s_blurKernel[dx + 1 + 3 * (dy + 1)] * base[u + v * blockSize];
 					}
 				}
@@ -471,7 +455,7 @@ void createSegmentKLT(int blockSize, std::vector<Pt>& part, int keep, std::vecto
 	if (part.size() == blockSize * blockSize) {
 		keep = blockSize * blockSize;
 	}
-	for (int i = 0; i < keep; ++i) {
+	for (size_t i = 0; i < keep; ++i) {
 		if (i==0 && part.size() == blockSize * blockSize) {
 			math::Vector dcBasis(blockSize * blockSize);
 			double normed = 1.0 / blockSize;
@@ -483,8 +467,8 @@ void createSegmentKLT(int blockSize, std::vector<Pt>& part, int keep, std::vecto
 		}
 		math::Vector col = eigenVectors.GetColumn(sortedIndex[i].second);
 		math::Vector fullVector(blockSize * blockSize);
-		for (int j = 0; j < part.size(); ++j) {
-			int offset = part[j].x + part[j].y * blockSize;
+		for (size_t j = 0; j < part.size(); ++j) {
+			size_t offset = part[j].x + part[j].y * blockSize;
 			fullVector[offset] = col[j];
 		}
 		math::Vector blurredVector(blockSize * blockSize);
@@ -492,9 +476,9 @@ void createSegmentKLT(int blockSize, std::vector<Pt>& part, int keep, std::vecto
 			for (int y = 0; y < blockSize; ++y) {
 				double tot = 0.0;
 				for (int dx = -1; dx < +1; ++dx) {
-					int u = std::clamp(x + dx, 0, blockSize - 1);
+					size_t u = std::clamp(x + dx, 0, blockSize - 1);
 					for (int dy = -1; dy < +1; ++dy) {
-						int v = std::clamp(y + dy, 0, blockSize - 1);
+						size_t v = std::clamp(y + dy, 0, blockSize - 1);
 						tot += s_blurKernel[dx + 1 + 3 * (dy + 1)] * fullVector[u + v * blockSize];
 					}
 				}
@@ -506,18 +490,18 @@ void createSegmentKLT(int blockSize, std::vector<Pt>& part, int keep, std::vecto
 }
 
 void writeDictionaryToPNG(math::Matrix dictionary, std::string fileName) {
-	int blockSize = static_cast<int>(sqrt(dictionary.Columns()));
+	size_t blockSize = static_cast<size_t>(sqrt(dictionary.Columns()));
 	if (dictionary.Columns() != blockSize * blockSize) {
 		throw std::invalid_argument("Dictionary should have square Column count");
 	}
-	int approxWidth = static_cast<int>(sqrt(dictionary.Rows()));
-	int approxHeight = (dictionary.Rows() / approxWidth) + ((dictionary.Rows() % approxWidth == 0) ? 0 : 1);
+	size_t approxWidth = static_cast<size_t>(sqrt(dictionary.Rows()));
+	size_t approxHeight = (dictionary.Rows() / approxWidth) + ((dictionary.Rows() % approxWidth == 0) ? 0 : 1);
 	image<double>* basisPic = new image<double>(approxWidth * blockSize, approxHeight * blockSize);
-	for (int i = 0; i < dictionary.Rows(); ++i) {
-		int blockx = i % approxWidth;
-		int blocky = i / approxWidth;
-		for (int x = 0; x < blockSize; ++x) {
-			for (int y = 0; y < blockSize; ++y) {
+	for (size_t i = 0; i < dictionary.Rows(); ++i) {
+		size_t blockx = i % approxWidth;
+		size_t blocky = i / approxWidth;
+		for (size_t x = 0; x < blockSize; ++x) {
+			for (size_t y = 0; y < blockSize; ++y) {
 				imRef(basisPic, x + blockx * blockSize, y + blocky * blockSize) = dictionary[i][x + (y * blockSize)];
 			}
 		}
@@ -587,10 +571,10 @@ int main(int argc, char* argv[])
 		case Mode::SEG_KLT: {
 			std::vector<std::vector<bool> > basisSet = distinctLineShapes(BlockSize);
 			baseDict = createSegmentDictionary(BlockSize, basisSet);
-			int fullRowCount = baseDict.Rows();
+			size_t fullRowCount = baseDict.Rows();
 			detailBasis = new math::Matrix[baseDict.Rows()];
-			int id = 0;
-			for (const auto basis : basisSet) {
+			size_t id = 0;
+			for (const std::vector<bool>& basis : basisSet) {
 				std::vector<Pt> part1;
 				std::vector<Pt> part2;
 				for (int x = 0; x < BlockSize; ++x) {
@@ -605,12 +589,12 @@ int main(int argc, char* argv[])
 				}
 				std::vector<math::Vector> basisVectors;
 				if (part1.size() > 2) {
-					createSegmentKLT(BlockSize, part1, part1.size() - 1, basisVectors); // drop last basis
+					createSegmentKLT(BlockSize, part1, static_cast<int>(part1.size()) - 1, basisVectors); // drop last basis
 					basisVectors.erase(basisVectors.begin()); // drop DC
 				}
 				if (part2.size() > 2) {
-					int sizeBefore = basisVectors.size();
-					createSegmentKLT(BlockSize, part2, part2.size() - 1, basisVectors); // drop last basis
+					size_t sizeBefore = basisVectors.size();
+					createSegmentKLT(BlockSize, part2, static_cast<int>(part2.size()) - 1, basisVectors); // drop last basis
 					basisVectors.erase(basisVectors.begin() + sizeBefore); // drop DC
 				}
 				detailBasis[id] = math::Matrix(basisVectors.size(), BlockSize * BlockSize);
@@ -647,7 +631,7 @@ int main(int argc, char* argv[])
 	}
 
 	auto dynamic = [&] (int prevCoeffs, const BasisChoice prevChoices[])  -> math::Matrix {
-		int atomCount = baseDict.Rows();
+		size_t atomCount = baseDict.Rows();
 		std::vector<int> chosen;
 		for (int i = 0; i < prevCoeffs; ++i) {
 			int choice = prevChoices[i].basisID;
@@ -680,17 +664,17 @@ int main(int argc, char* argv[])
 
 	image<double>* imgIn = LoadImageGenericMono(argv[4]);
 	std::cout << std::format("start processing image {} using largest {} coefficients.", argv[4], K) << std::endl;
-	const int width = imgIn->width();
-	const int height = imgIn->height();
+	const size_t width = imgIn->width();
+	const size_t height = imgIn->height();
 	image<double>* imgOut = new image<double>(width, height, false);
-	for (int x = 0; x < width; x += BlockSize) {
+	for (size_t x = 0; x < width; x += BlockSize) {
 		std::cout << std::format("{} %", (100 * x) / width) << std::endl;
-		for (int y = 0; y < height; y += BlockSize) {
+		for (size_t y = 0; y < height; y += BlockSize) {
 			math::Vector block(BlockSize * BlockSize);
-			for (int dx = 0; dx < BlockSize; ++dx) {
-				int u = x + dx;
-				for (int dy = 0; dy < BlockSize; ++dy) {
-					int v = y + dy;
+			for (size_t dx = 0; dx < BlockSize; ++dx) {
+				size_t u = x + dx;
+				for (size_t dy = 0; dy < BlockSize; ++dy) {
+					size_t v = y + dy;
 					if ((u < width) && (v < height))
 					{
 						block[dx + (BlockSize * dy)] = imRef(imgIn, u, v);
@@ -717,10 +701,10 @@ int main(int argc, char* argv[])
 					break;
 				}
 			}
-			for (int dx = 0; dx < BlockSize; ++dx) {
-				int u = x + dx;
-				for (int dy = 0; dy < BlockSize; ++dy) {
-					int v = y + dy;
+			for (size_t dx = 0; dx < BlockSize; ++dx) {
+				size_t u = x + dx;
+				for (size_t dy = 0; dy < BlockSize; ++dy) {
+					size_t v = y + dy;
 					if ((u < width) && (v < height))
 					{
 						imRef(imgOut, u, v) = decoded[dx + (BlockSize * dy)];
@@ -733,9 +717,7 @@ int main(int argc, char* argv[])
 	SaveImageGeneric(imgOut, argv[5], imgFormat::PNG);
 	delete imgIn;
 	delete imgOut;
-	if (detailBasis != nullptr) {
-		delete[] detailBasis;
-	}
+	delete[] detailBasis;
     return 0;
 }
 

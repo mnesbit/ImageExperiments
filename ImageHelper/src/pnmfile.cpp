@@ -104,13 +104,13 @@ image<uchar> *loadPBMNoThrow(const char *name) {
 }
 
 void savePBM(const image<uchar> *im, const char *name) {
-  int width = im->width();
-  int height = im->height();
+  size_t width = im->width();
+  size_t height = im->height();
   std::ofstream file(name, std::ios::out | std::ios::binary);
 
   file << "P4\n" << width << " " << height << "\n";
-  for (int i = 0; i < height; i++)
-    write_packed(imPtr(im, 0, i), width, file);
+  for (size_t i = 0; i < height; i++)
+    write_packed(imPtr(im, 0, i), static_cast<int>(width), file);
 }
 
 image<uchar> *loadPGM(const char *name) {
@@ -123,9 +123,9 @@ image<uchar> *loadPGM(const char *name) {
     throw pnm_error();
 
   pnm_read(file, buf);
-  int width = atoi(buf);
+  size_t width = atoi(buf);
   pnm_read(file, buf);
-  int height = atoi(buf);
+  size_t height = atoi(buf);
 
   pnm_read(file, buf);
   if (atoi(buf) > UCHAR_MAX)
@@ -148,9 +148,9 @@ image<uchar> *loadPGMNoThrow(const char *name) {
     return 0;
 
   pnm_read(file, buf);
-  int width = atoi(buf);
+  size_t width = atoi(buf);
   pnm_read(file, buf);
-  int height = atoi(buf);
+  size_t height = atoi(buf);
 
   pnm_read(file, buf);
   if (atoi(buf) > UCHAR_MAX)
@@ -164,8 +164,8 @@ image<uchar> *loadPGMNoThrow(const char *name) {
 }
 
 void savePGM(const image<uchar> *im, const char *name) {
-  int width = im->width();
-  int height = im->height();
+  size_t width = im->width();
+  size_t height = im->height();
   std::ofstream file(name, std::ios::out | std::ios::binary);
 
   file << "P5\n" << width << " " << height << "\n" << UCHAR_MAX << "\n";
@@ -182,9 +182,9 @@ image<rgb> *loadPPM(const char *name) {
     throw pnm_error();
 
   pnm_read(file, buf);
-  int width = atoi(buf);
+  size_t width = atoi(buf);
   pnm_read(file, buf);
-  int height = atoi(buf);
+  size_t height = atoi(buf);
 
   pnm_read(file, buf);
   if (atoi(buf) > UCHAR_MAX)
@@ -207,9 +207,9 @@ image<rgb> *loadPPMNoThrow(const char *name) {
     return 0;
 
   pnm_read(file, buf);
-  int width = atoi(buf);
+  size_t width = atoi(buf);
   pnm_read(file, buf);
-  int height = atoi(buf);
+  size_t height = atoi(buf);
 
   pnm_read(file, buf);
   if (atoi(buf) > UCHAR_MAX)
@@ -223,8 +223,8 @@ image<rgb> *loadPPMNoThrow(const char *name) {
 }
 
 void savePPM(const image<rgb> *im, const char *name) {
-  int width = im->width();
-  int height = im->height();
+  size_t width = im->width();
+  size_t height = im->height();
   std::ofstream file(name, std::ios::out | std::ios::binary);
 
   file << "P6\n" << width << " " << height << "\n" << UCHAR_MAX << "\n";
@@ -242,9 +242,9 @@ void load_image(image<T> **im, const char *name) {
     throw pnm_error();
 
   pnm_read(file, buf);
-  int width = atoi(buf);
+  size_t width = atoi(buf);
   pnm_read(file, buf);
-  int height = atoi(buf);
+  size_t height = atoi(buf);
 
   /* read data */
   *im = new image<T>(width, height);
@@ -253,8 +253,8 @@ void load_image(image<T> **im, const char *name) {
 
 template <class T>
 void save_image(const image<T> *im, const char *name) {
-  int width = im->width();
-  int height = im->height();
+  size_t width = im->width();
+  size_t height = im->height();
   std::ofstream file(name, std::ios::out | std::ios::binary);
 
   file << "VLIB\n" << width << " " << height << "\n";

@@ -34,7 +34,7 @@ template <class T>
 class image {
  public:
   /* create an image */
-  image(const int width, const int height, const bool init = true);
+  image(const size_t width, const size_t height, const bool init = true);
 
   /* delete an image */
   ~image();
@@ -46,10 +46,10 @@ class image {
   image<T> *copy() const;
 
   /* get the width of an image. */
-  int width() const { return w; }
+  size_t width() const { return w; }
 
   /* get the height of an image. */
-  int height() const { return h; }
+  size_t height() const { return h; }
 
   /* image data. */
   T *data;
@@ -58,11 +58,11 @@ class image {
   T **access;
 
  private:
-  int w, h;
+  size_t w, h;
 };
 
 template <class T>
-image<T>::image(const int width, const int height, const bool init) {
+image<T>::image(const size_t width, const size_t height, const bool init) {
   w = width;
   h = height;
   data = new T[w * h];  // allocate space for image data

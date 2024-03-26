@@ -110,6 +110,7 @@ image<rgb>* LoadGDIPlusToRGB(const char* filename, imgFormat* format) {
 	int width = gdiimage->GetWidth();
 	int height = gdiimage->GetHeight();
 	Gdiplus::Bitmap* tempBMP = new Gdiplus::Bitmap(width, height, PixelFormat32bppPARGB);
+	tempBMP->SetResolution(gdiimage->GetHorizontalResolution(), gdiimage->GetVerticalResolution());
 	Gdiplus::Graphics* graphics = new Gdiplus::Graphics(tempBMP);
 	graphics->DrawImage(gdiimage, 0, 0);
 	delete graphics;
@@ -259,15 +260,15 @@ void SaveImageGeneric(const image<rgb>* img,const char* filename,imgFormat forma
 	Gdiplus::GdiplusStartupInput gdiplusStartupInput;
 	ULONG_PTR gdiplusToken;
 	Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
-	int width=img->width();
-	int height=img->height();
-	Gdiplus::Bitmap*  bmp = new Gdiplus::Bitmap(width,height,PixelFormat24bppRGB);
-	for(int x=0;x<width;x++)
+	size_t width=img->width();
+	size_t height=img->height();
+	Gdiplus::Bitmap*  bmp = new Gdiplus::Bitmap(static_cast<int>(width),static_cast<int>(height),PixelFormat24bppRGB);
+	for(size_t x=0;x<width;x++)
 	{
-		for(int y=0;y<height;y++)
+		for(size_t y=0;y<height;y++)
 		{
 			Gdiplus::Color color((BYTE)imRef(img,x,y).r,(BYTE)imRef(img,x,y).g,(BYTE)imRef(img,x,y).b);
-			bmp->SetPixel(x,y,color);
+			bmp->SetPixel(static_cast<int>(x),static_cast<int>(y),color);
 		}
 	}
 
@@ -286,23 +287,23 @@ void SaveImageGeneric(const image<rgb>* img,const char* filename,imgFormat forma
 
 void SaveImageGeneric(const image<double>* img,const char* filename,imgFormat format)
 {
-	int width=img->width();
-	int height=img->height();
+	size_t width=img->width();
+	size_t height=img->height();
 	image<rgb>* tmpImg=new image<rgb>(width,height,false);
 	double min,max;
 	min=max=imRef(img,0,0);
-	for(int x=0;x<width;x++)
+	for(size_t x=0;x<width;x++)
 	{
-		for(int y=0;y<height;y++)
+		for(size_t y=0;y<height;y++)
 		{
 			double value=imRef(img,x,y);
 			if(value<min)min=value;
 			if(value>max)max=value;
 		}
 	}
-	for(int x=0;x<width;x++)
+	for(size_t x=0;x<width;x++)
 	{
-		for(int y=0;y<height;y++)
+		for(size_t y=0;y<height;y++)
 		{
 			uchar value=(uchar)bound(255.0*((imRef(img,x,y)-min)/(max-min)),0.0,255.0);
 			imRef(tmpImg,x,y).r=value;

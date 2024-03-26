@@ -14,14 +14,14 @@ class MatrixRow
 {
 public:
 	friend class Matrix;
-	double& operator[](int nSubscript);
-	const double& operator[](int nSubscript) const;
-	int Length() const { return m; }
+	double& operator[](size_t nSubscript);
+	const double& operator[](size_t nSubscript) const;
+	size_t Length() const { return m; }
 	~MatrixRow();
 private:
-	MatrixRow(int rowlength,double* rowdata); //only constructable by Matrix
+	MatrixRow(size_t rowlength,double* rowdata); //only constructable by Matrix
 	MatrixRow& operator=(const MatrixRow& matrix); // not assignable
-	int m;
+	size_t m;
 	double* rowdata;
 };
 
@@ -31,22 +31,24 @@ public:
 	friend class Vector;
 	friend class MatrixRow;
 	Matrix();
-	Matrix(int rows,int columns,const double* arraydata=0);
-	Matrix(int squarewidth,const double* arraydata=0);
+	Matrix(size_t rows, size_t columns,const double* arraydata=0);
+	Matrix(size_t squarewidth,const double* arraydata=0);
 	Matrix(const Matrix& matrix);
+	Matrix(Matrix&& matrix) noexcept;
 	Matrix(const Vector& vector);
 	~Matrix();
 
 	Matrix& operator=(const Matrix& matrix);
-	MatrixRow operator[](int nSubscript);
-	const MatrixRow operator[](int nSubscript) const;
+	Matrix& operator=(Matrix&& matrix) noexcept;
+	MatrixRow operator[](size_t nSubscript);
+	const MatrixRow operator[](size_t nSubscript) const;
 
-	int Rows() const { return m; }
-	int Columns() const { return n; }
+	size_t Rows() const { return m; }
+	size_t Columns() const { return n; }
 	Vector GetDiag() const;
 	void SetDiag(const Vector& diag);
-	Vector GetRow(int nSubscript) const;
-	Vector GetColumn(int nSubscript) const;
+	Vector GetRow(size_t nSubscript) const;
+	Vector GetColumn(size_t nSubscript) const;
 	Matrix GetTranspose() const;
 	double* Data() { return data; }
 	const double* Data() const { return data; }
@@ -61,8 +63,8 @@ public:
 	void Load(const char* filename);
 	void Reset();
 private:
-	int m;
-	int n;
+	size_t m;
+	size_t n;
 	double* data;
 };
 std::ostream& operator<<(std::ostream& os, const Matrix& matrix);

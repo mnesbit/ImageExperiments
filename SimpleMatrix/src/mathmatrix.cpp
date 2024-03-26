@@ -25,7 +25,7 @@ Matrix::Matrix()
 {
 }
 
-Matrix::Matrix(int rows,int columns,const double* arraydata)
+Matrix::Matrix(size_t rows, size_t columns,const double* arraydata)
 	: m(rows)
 	, n(columns)
 	, data(new double[m*n])
@@ -40,7 +40,7 @@ Matrix::Matrix(int rows,int columns,const double* arraydata)
 	}
 }
 
-Matrix::Matrix(int squarewidth,const double* arraydata)
+Matrix::Matrix(size_t squarewidth,const double* arraydata)
 	: m(squarewidth)
 	, n(squarewidth)
 	, data(new double[m*n])
@@ -55,13 +55,25 @@ Matrix::Matrix(int squarewidth,const double* arraydata)
 	}
 }
 
-
 Matrix::Matrix(const Matrix& matrix)
 	: m(matrix.Rows())
 	, n(matrix.Columns())
-	, data(new double[m*n])
+	, data(new double[m * n])
 {
-	memcpy(data,matrix.data,m*n*sizeof(double));
+	memcpy(data, matrix.data, m * n * sizeof(double));
+}
+
+Matrix::Matrix(Matrix&& matrix) noexcept
+	: m(0)
+	, n(0)
+	, data(nullptr)
+{
+	m = matrix.m;
+	n = matrix.n;
+	data = matrix.data;
+	matrix.m = 0;
+	matrix.n = 0;
+	matrix.data = nullptr;
 }
 
 Matrix::Matrix(const Vector& vector)
@@ -69,7 +81,7 @@ Matrix::Matrix(const Vector& vector)
 	, n(vector.Length())
 	, data(new double[m*n])
 {
-	for(int i=0;i<m;i++)
+	for(size_t i=0;i<m;i++)
 	{
 		data[i*(n+1)]=vector[i];
 	}
@@ -78,17 +90,33 @@ Matrix::Matrix(const Vector& vector)
 Matrix::~Matrix()
 {
 	delete[] data;
+	data = nullptr;
 }
 
 Matrix& Matrix::operator=(const Matrix& matrix)
 {
-	if(this!=&matrix)
+	if (this != &matrix)
 	{
 		delete[] data;
-		m=matrix.m;
-		n=matrix.n;
-		data=new double[m*n];
-		memcpy(data,matrix.data,m*n*sizeof(double));
+		m = matrix.m;
+		n = matrix.n;
+		data = new double[m * n];
+		memcpy(data, matrix.data, m * n * sizeof(double));
+	}
+	return *this;
+}
+
+Matrix& Matrix::operator=(Matrix&& matrix) noexcept
+{
+	if (this != &matrix)
+	{
+		delete[] data;
+		m = matrix.m;
+		n = matrix.n;
+		data = matrix.data;
+		matrix.m = 0;
+		matrix.n = 0;
+		matrix.data = nullptr;
 	}
 	return *this;
 }
@@ -96,7 +124,7 @@ Matrix& Matrix::operator=(const Matrix& matrix)
 Vector Matrix::GetDiag() const
 {
 	Vector diag(std::min(m,n));
-	for(int i=0;i<std::min(m,n);i++)
+	for(size_t i=0;i<std::min(m,n);i++)
 	{
 		diag[i]=data[i*(n+1)];
 	}
@@ -106,20 +134,20 @@ Vector Matrix::GetDiag() const
 void Matrix::SetDiag(const Vector& diag)
 {
 	if(std::min(m,n)!=diag.Length())throw new std::range_error("invalid vector length");
-	for(int i=0;i<std::min(m,n);i++)
+	for(size_t i=0;i<std::min(m,n);i++)
 	{
 		data[i*(n+1)]=diag[i];
 	}
 }
 
-Vector Matrix::GetRow(int nSubscript) const
+Vector Matrix::GetRow(size_t nSubscript) const
 {
 	if((nSubscript>=0)&&(nSubscript<m))
 	{
 		Vector row(n);
 		double *pDataI=&data[n*nSubscript];
 		double *pDataO=row.Data();
-		for(int i=0;i<n;i++)
+		for(size_t i=0;i<n;i++)
 		{
 			*pDataO=*pDataI;
 			pDataO++;
@@ -130,14 +158,14 @@ Vector Matrix::GetRow(int nSubscript) const
 	throw new std::range_error("invalid row index");
 }
 
-Vector Matrix::GetColumn(int nSubscript) const
+Vector Matrix::GetColumn(size_t nSubscript) const
 {
 	if((nSubscript>=0)&&(nSubscript<n))
 	{
 		Vector column(m);
 		double *pDataI=&data[nSubscript];
 		double *pDataO=column.Data();
-		for(int i=0;i<m;i++)
+		for(size_t i=0;i<m;i++)
 		{
 			*pDataO=*pDataI;
 			pDataO++;
@@ -152,9 +180,9 @@ Matrix Matrix::GetTranspose() const
 {
 	Matrix transp(n,m);
 	double* tdata=transp.Data();
-	for(int i=0;i<m;i++)
+	for(size_t i=0;i<m;i++)
 	{
-		for(int j=0;j<n;j++)
+		for(size_t j=0;j<n;j++)
 		{
 			tdata[j*m+i]=data[i*n+j];
 		}
@@ -162,7 +190,7 @@ Matrix Matrix::GetTranspose() const
 	return transp;
 }
 
-MatrixRow Matrix::operator[](int nSubscript)
+MatrixRow Matrix::operator[](size_t nSubscript)
 {
 	if((nSubscript>=0)&&(nSubscript<m))
 	{
@@ -171,7 +199,7 @@ MatrixRow Matrix::operator[](int nSubscript)
 	throw new std::range_error("invalid row index");
 }
 
-const MatrixRow Matrix::operator[](int nSubscript) const
+const MatrixRow Matrix::operator[](size_t nSubscript) const
 {
 	if((nSubscript>=0)&&(nSubscript<m))
 	{
@@ -180,7 +208,7 @@ const MatrixRow Matrix::operator[](int nSubscript) const
 	throw new std::range_error("invalid row index");
 }
 
-MatrixRow::MatrixRow(int rowlength,double* rowdata)
+MatrixRow::MatrixRow(size_t rowlength,double* rowdata)
 	: m(rowlength)
 	, rowdata(rowdata)
 {
@@ -190,7 +218,7 @@ MatrixRow::~MatrixRow()
 {
 }
 
-double& MatrixRow::operator[](int nSubscript)
+double& MatrixRow::operator[](size_t nSubscript)
 {
 	if((nSubscript>=0) && (nSubscript<m))
 	{
@@ -199,7 +227,7 @@ double& MatrixRow::operator[](int nSubscript)
 	throw new std::range_error("invalid row index");
 }
 
-const double& MatrixRow::operator[](int nSubscript) const
+const double& MatrixRow::operator[](size_t nSubscript) const
 {
 	if((nSubscript>=0) && (nSubscript<m))
 	{
@@ -212,7 +240,7 @@ void Matrix::MakeIdentityMatrix()
 {
 	if(m!=n)throw new std::range_error("matrix must be square");
 	memset(data,0,m*n*sizeof(double));
-	for(int i=0;i<m;i++)
+	for(size_t i=0;i<m;i++)
 	{
 		data[i*(n+1)]=1.0;
 	}
@@ -223,7 +251,7 @@ void Matrix::Add(const Matrix& right)
 	if((Rows()!=right.Rows())||(Columns()!=right.Columns()))throw new std::range_error("mismatched sizes");
 	double* pDataL=data;
 	double* pDataR=right.data;
-	for(int i=0;i<(m*n);i++)
+	for(size_t i=0;i<(m*n);i++)
 	{
 		double value=(*pDataL)+(*pDataR++);
 		*pDataL++=value;
@@ -235,7 +263,7 @@ void Matrix::Subtract(const Matrix& right)
 	if((Rows()!=right.Rows())||(Columns()!=right.Columns()))throw new std::range_error("mismatched sizes");
 	double* pDataL=data;
 	double* pDataR=right.data;
-	for(int i=0;i<(m*n);i++)
+	for(size_t i=0;i<(m*n);i++)
 	{
 		double value=(*pDataL)-(*pDataR++);
 		*pDataL++=value;
@@ -247,7 +275,7 @@ void Matrix::ReverseSubtract(const Matrix& left)
 	if((Rows()!=left.Rows())||(Columns()!=left.Columns()))throw new std::range_error("mismatched sizes");
 	double* pDataR=data;
 	double* pDataL=left.data;
-	for(int i=0;i<(m*n);i++)
+	for(size_t i=0;i<(m*n);i++)
 	{
 		double value=(*pDataR)-(*pDataL++);
 		*pDataR++=value;
@@ -257,7 +285,7 @@ void Matrix::ReverseSubtract(const Matrix& left)
 void Matrix::Scale(double scaling)
 {
 	double* pData=data;
-	for(int i=0;i<(m*n);i++)
+	for(size_t i=0;i<(m*n);i++)
 	{
 		double value=scaling*(*pData);
 		*pData++=value;
@@ -267,7 +295,7 @@ void Matrix::Scale(double scaling)
 void Matrix::AddConstant(double constant)
 {
 	double* pData=data;
-	for(int i=0;i<(m*n);i++)
+	for(size_t i=0;i<(m*n);i++)
 	{
 		double value=constant+(*pData);
 		*pData++=value;
@@ -278,23 +306,23 @@ Matrix Matrix::GetSquare()const
 {
 	Matrix result(m,m);
 	double* pDataO=result.Data();
-	for(int i=0;i<m;i++)
+	for(size_t i=0;i<m;i++)
 	{
 		double tot=0.0;
 		double* pDataL=&data[i*n];
 		double* pDataR;
-		for(int k=0;k<n;k++)
+		for(size_t k=0;k<n;k++)
 		{
 			tot+=square(*pDataL);
 			pDataL++;
 		}
 		pDataO[i*(m+1)]=tot;
-		for(int j=0;j<i;j++)
+		for(size_t j=0;j<i;j++)
 		{
 			tot=0.0;
 			pDataL=&data[i*n];
 			pDataR=&data[j*n];
-			for(int k=0;k<n;k++)
+			for(size_t k=0;k<n;k++)
 			{
 				tot+=(*pDataL)*(*pDataR);
 				pDataL++;
@@ -368,22 +396,22 @@ Matrix Subtract(const Matrix& left,const Matrix& right)
 Matrix Multiply(const Matrix& left,const Matrix& right)
 {
 	if(left.Columns()!=right.Rows())throw  new std::range_error("mismatched sizes");
-	int nrows=left.Rows();
-	int ncols=left.Columns();
-	int mcols=right.Columns();
+	size_t nrows=left.Rows();
+	size_t ncols=left.Columns();
+	size_t mcols=right.Columns();
 	Matrix result(nrows,mcols);
 	const double* pDataL=left.Data();
 	const double* pDataR=right.Data();
 	double* pDataO=result.Data();
 	const double *pL,*pR;
-	for(int i=0;i<nrows;i++)
+	for(size_t i=0;i<nrows;i++)
 	{
-		for(int j=0;j<mcols;j++)
+		for(size_t j=0;j<mcols;j++)
 		{
 			double tot=0.0;
 			pL=pDataL;
 			pR=pDataR;
-			for(int k=0;k<ncols;k++)
+			for(size_t k=0;k<ncols;k++)
 			{
 				tot+=(*pL)*(*pR);
 				pL++;
@@ -406,12 +434,12 @@ Vector Multiply(const Matrix& left,const Vector& right)
 	const double *pDataR=right.Data();
 	double *pDataO=result.Data();
 	const double *pL,*pR;
-	for(int i=0;i<left.Rows();i++)
+	for(size_t i=0;i<left.Rows();i++)
 	{
 		double tot=0.0;
 		pL=pDataL;
 		pR=pDataR;
-		for(int j=0;j<right.Length();j++)
+		for(size_t j=0;j<right.Length();j++)
 		{
 			tot+=(*pL)*(*pR);
 			pL++;
@@ -434,9 +462,9 @@ void Matrix::Reset()
 std::ostream& operator<<(std::ostream& os, const Matrix& matrix)
 {
 	const double *pData=matrix.Data();
-	for(int i=0;i<matrix.Rows();i++)
+	for(size_t i=0;i<matrix.Rows();i++)
 	{
-		for(int j=0;j<matrix.Columns();j++)
+		for(size_t j=0;j<matrix.Columns();j++)
 		{
 			os<<(*pData++)<<" ";
 		}

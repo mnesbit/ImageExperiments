@@ -15,15 +15,17 @@ class Vector
 public:
 	friend class Matrix;
 	Vector();
-	Vector(int length,const double* vectordata=0);
+	Vector(size_t length,const double* vectordata=0);
 	Vector(const Vector& vector);
+	Vector(Vector&& vector) noexcept;
 	~Vector();
 
 	Vector& operator=(const Vector& vector);
-	const double& operator[](int nSubscript) const;
-	double& operator[](int nSubscript);
+	Vector& operator=(Vector&& vector) noexcept;
+	const double& operator[](size_t nSubscript) const;
+	double& operator[](size_t nSubscript);
 
-	int Length() const { return m; }
+	size_t Length() const { return m; }
 	double* Data() { return data; }
 	const double* Data() const { return data; }
 
@@ -39,7 +41,7 @@ public:
 	void Load(const char* filename);
 	void Reset();
 private:
-	int m;
+	size_t m;
 	double* data;
 };
 

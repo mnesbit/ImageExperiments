@@ -143,9 +143,6 @@
       <Project>{46560815-969a-4eb8-9146-b9501786c1f3}</Project>
     </ProjectReference>
   </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="OrthogonalMatchingPursuit.h" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

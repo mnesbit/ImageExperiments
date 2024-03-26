@@ -19,11 +19,11 @@ inline T square(const T &x) { return x*x; };
 
 Vector::Vector()
 	: m(0)
-	, data(0)
+	, data(nullptr)
 {
 }
 
-Vector::Vector(int length,const double* vectordata)
+Vector::Vector(size_t length,const double* vectordata)
 	: m(length)
 	, data(new double[length])
 {
@@ -41,27 +41,51 @@ Vector::Vector(const Vector& vector)
 	: m(vector.Length())
 	, data(new double[m])
 {
-	memcpy(data,vector.data,m*sizeof(double));
+	memcpy(data, vector.data, m * sizeof(double));
+}
+
+Vector::Vector(Vector&& vector) noexcept
+	: m(0)
+	, data(nullptr)
+{
+	m = vector.m;
+	data = vector.data;
+	vector.m = 0;
+	vector.data = nullptr;
 }
 
 Vector::~Vector()
 {
 	delete[] data;
+	data = nullptr;
 }
 
 Vector& Vector::operator=(const Vector& vector)
 {
-	if(this!=&vector)
+	if (this != &vector)
 	{
 		delete[] data;
-		m=vector.m;
-		data=new double[m];
-		memcpy(data,vector.data,m*sizeof(double));
+		m = vector.m;
+		data = new double[m];
+		memcpy(data, vector.data, m * sizeof(double));
 	}
 	return *this;
 }
 
-double& Vector::operator[](int nSubscript)
+Vector& Vector::operator=(Vector&& vector) noexcept
+{
+	if (this != &vector)
+	{
+		delete[] data;
+		m = vector.m;
+		data = vector.data;
+		vector.m = 0;
+		vector.data = nullptr;
+	}
+	return *this;
+}
+
+double& Vector::operator[](size_t nSubscript)
 {
 	if((nSubscript>=0) && (nSubscript<m))
 	{
@@ -70,7 +94,7 @@ double& Vector::operator[](int nSubscript)
 	throw new std::range_error("invalid vector index");
 }
 
-const double& Vector::operator[](int nSubscript) const
+const double& Vector::operator[](size_t nSubscript) const
 {
 	if((nSubscript>=0) && (nSubscript<m))
 	{
@@ -84,7 +108,7 @@ void Vector::Add(const Vector& right)
 	if(Length()!=right.Length())throw  new std::range_error("mismatched sizes");
 	double* pDataL=data;
 	double* pDataR=right.data;
-	for(int i=0;i<m;i++)
+	for(size_t i=0;i<m;i++)
 	{
 		double value=(*pDataL)+(*pDataR++);
 		*pDataL++=value;
@@ -96,7 +120,7 @@ void Vector::Subtract(const Vector& right)
 	if(Length()!=right.Length())throw  new std::range_error("mismatched sizes");
 	double* pDataL=data;
 	double* pDataR=right.data;
-	for(int i=0;i<m;i++)
+	for(size_t i=0;i<m;i++)
 	{
 		double value=(*pDataL)-(*pDataR++);
 		*pDataL++=value;
@@ -108,7 +132,7 @@ void Vector::ReverseSubtract(const Vector& left)
 	if(Length()!=left.Length())throw  new std::range_error("mismatched sizes");
 	double* pDataR=data;
 	double* pDataL=left.data;
-	for(int i=0;i<m;i++)
+	for(size_t i=0;i<m;i++)
 	{
 		double value=(*pDataL++)-(*pDataR);
 		*pDataR++=value;
@@ -118,7 +142,7 @@ void Vector::ReverseSubtract(const Vector& left)
 void Vector::Scale(double scaling)
 {
 	double* pData=data;
-	for(int i=0;i<m;i++)
+	for(size_t i=0;i<m;i++)
 	{
 		double value=scaling*(*pData);
 		*pData++=value;
@@ -128,7 +152,7 @@ void Vector::Scale(double scaling)
 void Vector::AddConstant(double constant)
 {
 	double* pData=data;
-	for(int i=0;i<m;i++)
+	for(size_t i=0;i<m;i++)
 	{
 		double value=constant+(*pData);
 		*pData++=value;
@@ -138,7 +162,7 @@ void Vector::AddConstant(double constant)
 std::ostream& operator<<(std::ostream& os, const Vector& vector)
 {
 	const double *pData=vector.Data();
-	for(int i=0;i<vector.Length();i++)
+	for(size_t i=0;i<vector.Length();i++)
 	{
 		os<<(*pData++)<<std::endl;
 	}
@@ -151,7 +175,7 @@ double Vector::Magnitude()
 {
 	double* pData=data;
 	double biggest=0.0; //reduce overflow by diving through
-	for(int i=0;i<m;i++)
+	for(size_t i=0;i<m;i++)
 	{
 		if(abs(*pData)>biggest)
 		{
@@ -161,7 +185,7 @@ double Vector::Magnitude()
 	}
 	pData=data;
 	double tot=0.0;
-	for(int i=0;i<m;i++)
+	for(size_t i=0;i<m;i++)
 	{
 		tot+=square((*pData)/biggest);
 		pData++;
@@ -173,7 +197,7 @@ double Vector::SquaredMagnitude()
 {
 	double tot=0.0;
 	double* pData=data;
-	for(int i=0;i<m;i++)
+	for(size_t i=0;i<m;i++)
 	{
 		tot+=square(*pData);
 		pData++;
@@ -187,7 +211,7 @@ double Vector::DotProduct(const Vector& right)
 	double tot=0.0;
 	double* pDataL=data;
 	double* pDataR=right.data;
-	for(int i=0;i<m;i++)
+	for(size_t i=0;i<m;i++)
 	{
 		tot+=(*pDataL++)*(*pDataR++);
 	}

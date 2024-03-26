@@ -34,8 +34,8 @@ static double dist(double a,double b)
 SymmetricEigenDecomposition::SymmetricEigenDecomposition(const Matrix& input)
 {
 	// initialize some variables  
-	int m = input.Rows();
-	int n = input.Columns();
+	int m = static_cast<int>(input.Rows());
+	int n = static_cast<int>(input.Columns());
 	m_eigenVectors = input;
 	m_eigenValues = Vector(m);
 	Vector tempVector(m);
