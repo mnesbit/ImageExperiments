@@ -161,31 +161,49 @@ double CalcOMPDynamic(int K, BasisChoice results[], const math::Vector& input, D
 	return residual.Magnitude();
 }
 
-math::Vector FromCoeffsStatic(int K, const BasisChoice coeffs[], const math::Matrix& dictionary) {
+math::Vector FromCoeffsStatic(int K, const BasisChoice coeffs[], const math::Matrix& dictionary,const math::Vector original, double squaredError[], double summedMagnitude[]) {
 	size_t N = dictionary.Columns();
 	math::Vector results(dictionary.Columns());
 	for (int i = 0; i < K; ++i) {
+		double total = 0.0;
 		if (coeffs[i].basisID >= 0 && coeffs[i].coeff != 0.0) {
 			const math::MatrixRow basis = dictionary[coeffs[i].basisID];
 			for (int j = 0; j < N; ++j) {
-				results[j] += basis[j] * static_cast<float>(coeffs[i].coeff);
+				int mag;
+				frexp(coeffs[i].coeff, &mag);
+				summedMagnitude[i] += static_cast<double>(mag);
+				results[j] += basis[j] * static_cast<float>(coeffs[i].coeff); //crop coefficient to float to simulate some quantization
+				double error = results[j] - original[j];
+				total += error * error;
 			}
+		} else {
+			break;
 		}
+		squaredError[i] += total;
 	}
 	return results;
 }
 
-math::Vector FromCoeffsDynamic(int K, const BasisChoice coeffs[], DynamicDictionaryFunction dynamicDictionary) {
+math::Vector FromCoeffsDynamic(int K, const BasisChoice coeffs[], DynamicDictionaryFunction dynamicDictionary, const math::Vector original, double squaredError[], double summedMagnitude[]) {
 	math::Matrix dictionary = dynamicDictionary(K, coeffs);
 	size_t N = dictionary.Columns();
 	math::Vector results(dictionary.Columns());
 	for (int i = 0; i < K; ++i) {
+		double total = 0.0;
 		if (coeffs[i].basisID >= 0 && coeffs[i].coeff != 0.0) {
 			const math::MatrixRow basis = dictionary[coeffs[i].basisID];
 			for (int j = 0; j < N; ++j) {
-				results[j] += basis[j] * static_cast<float>(coeffs[i].coeff);
+				int mag;
+				frexp(coeffs[i].coeff, &mag);
+				summedMagnitude[i] += static_cast<double>(mag);
+				results[j] += basis[j] * static_cast<float>(coeffs[i].coeff); //crop coefficient to float to simulate some quantization
+				double error = results[j] - original[j];
+				total += error * error;
 			}
+		} else {
+			break;
 		}
+		squaredError[i] += total;
 	}
 	return results;
 }
@@ -667,6 +685,12 @@ int main(int argc, char* argv[])
 	const size_t width = imgIn->width();
 	const size_t height = imgIn->height();
 	image<double>* imgOut = new image<double>(width, height, false);
+	double* squaredError = new double[K];
+	double* summedMagnitude = new double[K];
+	for (int i = 0; i < K; ++i) {
+		squaredError[i] = 0.0;
+		summedMagnitude[i] = 0.0;
+	}
 	for (size_t x = 0; x < width; x += BlockSize) {
 		std::cout << std::format("{} %", (100 * x) / width) << std::endl;
 		for (size_t y = 0; y < height; y += BlockSize) {
@@ -692,12 +716,12 @@ int main(int argc, char* argv[])
 				case Mode::KLT:
 				case Mode::SEG: {
 					CalcOMPStatic(K, choices, block, baseDict);
-					decoded = FromCoeffsStatic(K, choices, baseDict);
+					decoded = FromCoeffsStatic(K, choices, baseDict, block, squaredError, summedMagnitude);
 					break;
 				}
 				case Mode::SEG_KLT: {
 					CalcOMPDynamic(K, choices, block, dynamic);
-					decoded = FromCoeffsDynamic(K, choices, dynamic);
+					decoded = FromCoeffsDynamic(K, choices, dynamic, block, squaredError, summedMagnitude);
 					break;
 				}
 			}
@@ -712,11 +736,21 @@ int main(int argc, char* argv[])
 				}
 			}
 			delete[] choices;
+
 		}
+	}
+	std::cout << std::format("Results of {} mode up to {} coefficients on {} x {} blocks", modeStr, K, BlockSize, BlockSize) << std::endl;
+	for (int i = 0; i < K; ++i) {
+		double mse = squaredError[i] / (width * height);
+		double psnr = 20.0 * log10(255.0) - 10.0 * log10(mse);
+		double averageMag = summedMagnitude[i] / (width * height);
+		std::cout << std::format("PSNR at {} coefficients {} average magnitude {}", i + 1, psnr, averageMag) << std::endl;
 	}
 	SaveImageGeneric(imgOut, argv[5], imgFormat::PNG);
 	delete imgIn;
 	delete imgOut;
+	delete[] squaredError;
+	delete[] summedMagnitude;
 	delete[] detailBasis;
     return 0;
 }
