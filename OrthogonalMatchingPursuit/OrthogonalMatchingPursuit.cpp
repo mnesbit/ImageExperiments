@@ -246,6 +246,25 @@ double covariancePredictionModel(double dx, double dy) {
 		+ 657.8100000000001 * exp(-0.0436057 * abs(dx) + -0.050844400000000005 * abs(dy));
 }
 
+std::vector<math::Vector> createBasis(math::Matrix& part)
+{
+	math::SymmetricEigenDecomposition eigenDeco(part);
+	math::Matrix eigenVectors = eigenDeco.EigenVectors();
+	math::Vector eigenValues = eigenDeco.EigenValues();
+	std::vector<std::pair<double, int> > sortedIndex;
+	sortedIndex.reserve(eigenValues.Length());
+	for (int i = 0; i < eigenValues.Length(); ++i) {
+		sortedIndex.push_back(std::make_pair(abs(eigenValues[i]), i));
+	}
+	std::sort(sortedIndex.begin(), sortedIndex.end(), std::greater<std::pair<double, int> >());
+	std::vector<math::Vector> basisSet;
+	for (int i = 0; i < eigenValues.Length(); ++i) {
+		math::Vector col = eigenVectors.GetColumn(sortedIndex[i].second);
+		basisSet.push_back(col);
+	}
+	return basisSet;
+}
+
 math::Matrix createKLTDictionary(int blockSize) {
 	math::Matrix covarianceMatrix(blockSize * blockSize, blockSize * blockSize);
 	for (int i = 0; i < blockSize * blockSize; ++i)
@@ -259,30 +278,19 @@ math::Matrix createKLTDictionary(int blockSize) {
 			covarianceMatrix[i][j] = covariancePredictionModel(xpos1 - xpos2, ypos1-ypos2);
 		}
 	}
-	math::SymmetricEigenDecomposition eigenDeco(covarianceMatrix);
-	math::Matrix eigenVectors = eigenDeco.EigenVectors();
-	math::Vector eigenValues = eigenDeco.EigenValues();
-	std::vector<std::pair<double, int> > sortedIndex;
-	sortedIndex.reserve(eigenValues.Length());
-	for (int i = 0; i < eigenValues.Length(); i++)
-	{
-		sortedIndex.push_back(std::make_pair(abs(eigenValues[i]), i));
-	}
-	std::sort(sortedIndex.begin(), sortedIndex.end(), std::greater<std::pair<double, int> >());
-	math::Matrix dictionary(sortedIndex.size(), blockSize * blockSize);
-	for (int i = 0; i < sortedIndex.size(); ++i)
+	std::vector<math::Vector> sortedBasis = createBasis(covarianceMatrix);
+	math::Matrix dictionary(sortedBasis.size(), blockSize * blockSize);
+	for (int i = 0; i < sortedBasis.size(); ++i)
 	{
 		if (i == 0) { // ensure we have a flat DC basis
 			for (int j = 0; j < blockSize * blockSize; ++j)
 			{
 				dictionary[i][j] = 1.0 / blockSize;
 			}
-		}
-		else {
-			math::Vector col = eigenVectors.GetColumn(sortedIndex[i].second);
+		} else {
 			for (int j = 0; j < blockSize * blockSize; ++j)
 			{
-				dictionary[i][j] = col[j];
+				dictionary[i][j] = sortedBasis[i][j];
 			}
 		}
 	}
@@ -294,14 +302,25 @@ typedef struct Pt_Tag
 	int x, y;
 } Pt;
 
-static int Area(Pt& a, Pt& b, Pt& c)
-{
-	return ((b.x - a.x) * (c.y - a.y)) - ((c.x - a.x) * (b.y - a.y));
+static double Dist(Pt& line1, Pt& line2, Pt& point) {
+	return static_cast<double>((line2.x - line1.x) * (line1.y - point.y) - (line1.x - point.x) * (line2.y - line1.y)) / sqrt((line2.x - line1.x) * (line2.x - line1.x) + (line2.y - line1.y) * (line2.y - line1.y));
 }
 
-std::vector<std::vector<bool> > distinctLineShapes(int blockSize) {
-	std::set<std::vector<bool> > basisSet;
-	basisSet.insert(std::vector<bool>(blockSize * blockSize, true)); //dc basis
+struct CustomComparator {
+	bool operator()(std::vector<double> a, std::vector<double> b) const
+	{
+		for (int i = 0; i < a.size(); ++i) {
+			if (signbit(a[i]) != signbit(b[i])) {
+				return signbit(a[i]);
+			}
+		}
+		return false;
+	}
+};
+
+std::vector<std::vector<double> > distinctLineShapes(int blockSize) {
+	std::set<std::vector<double>, CustomComparator> basisSet;
+	basisSet.insert(std::vector<double>(blockSize * blockSize, true)); //dc basis
 	for (int side1 = -1; side1 < blockSize + 1; ++side1)
 	{
 		Pt s1 = { .x = side1, .y = 0 };
@@ -310,23 +329,23 @@ std::vector<std::vector<bool> > distinctLineShapes(int blockSize) {
 			Pt s2a = { .x = 0, .y = static_cast<int>(side2) };
 			Pt s2b = { .x = static_cast<int>(side2), .y = blockSize - 1 };
 			Pt s2c = { .x = blockSize - 1, .y = static_cast<int>(side2) };
-			std::vector<bool> bits1(blockSize * blockSize);
-			std::vector<bool> invbits1(blockSize * blockSize);
-			std::vector<bool> bits2(blockSize * blockSize);
-			std::vector<bool> invbits2(blockSize * blockSize);
-			std::vector<bool> bits3(blockSize * blockSize);
-			std::vector<bool> invbits3(blockSize * blockSize);
+			std::vector<double> bits1(blockSize * blockSize);
+			std::vector<double> invbits1(blockSize * blockSize);
+			std::vector<double> bits2(blockSize * blockSize);
+			std::vector<double> invbits2(blockSize * blockSize);
+			std::vector<double> bits3(blockSize * blockSize);
+			std::vector<double> invbits3(blockSize * blockSize);
 			for (size_t x = 0; x < blockSize; ++x)
 			{
 				for (size_t y = 0; y < blockSize; ++y)
 				{
 					Pt s3 = { .x = static_cast<int>(x), .y = static_cast<int>(y) };
-					bits1[x + y * blockSize] = (Area(s1, s2a, s3) > 0);
-					invbits1[x + y * blockSize] = !bits1[x + y * blockSize];
-					bits2[x + y * blockSize] = (Area(s1, s2b, s3) > 0);
-					invbits2[x + y * blockSize] = !bits2[x + y * blockSize];
-					bits3[x + y * blockSize] = (Area(s1, s2c, s3) > 0);
-					invbits3[x + y * blockSize] = !bits3[x + y * blockSize];
+					bits1[x + y * blockSize] = tanh(2.0 * Dist(s1, s2a, s3));
+					invbits1[x + y * blockSize] = -bits1[x + y * blockSize];
+					bits2[x + y * blockSize] = tanh(2.0 * Dist(s1, s2b, s3));
+					invbits2[x + y * blockSize] = -bits2[x + y * blockSize];
+					bits3[x + y * blockSize] = tanh(2.0 * Dist(s1, s2c, s3));
+					invbits3[x + y * blockSize] = -bits3[x + y * blockSize];
 				}
 			}
 			if (!(basisSet.contains(bits1) || basisSet.contains(invbits1)))
@@ -351,23 +370,23 @@ std::vector<std::vector<bool> > distinctLineShapes(int blockSize) {
 			Pt s2a = { .x = 0, .y = static_cast<int>(side2) };
 			Pt s2b = { .x = static_cast<int>(side2), .y = blockSize - 1 };
 			Pt s2c = { .x = 0, .y = side1 };
-			std::vector<bool> bits1(blockSize * blockSize);
-			std::vector<bool> invbits1(blockSize * blockSize);
-			std::vector<bool> bits2(blockSize * blockSize);
-			std::vector<bool> invbits2(blockSize * blockSize);
-			std::vector<bool> bits3(blockSize * blockSize);
-			std::vector<bool> invbits3(blockSize * blockSize);
+			std::vector<double> bits1(blockSize * blockSize);
+			std::vector<double> invbits1(blockSize * blockSize);
+			std::vector<double> bits2(blockSize * blockSize);
+			std::vector<double> invbits2(blockSize * blockSize);
+			std::vector<double> bits3(blockSize * blockSize);
+			std::vector<double> invbits3(blockSize * blockSize);
 			for (size_t x = 0; x < blockSize; x++)
 			{
 				for (size_t y = 0; y < blockSize; y++)
 				{
 					Pt s3{ .x = static_cast<int>(x), .y = static_cast<int>(y) };
-					bits1[x + y * blockSize] = (Area(s1, s2a, s3) > 0);
-					invbits1[x + y * blockSize] = !bits1[x + y * blockSize];
-					bits2[x + y * blockSize] = (Area(s1, s2b, s3) > 0);
-					invbits2[x + y * blockSize] = !bits2[x + y * blockSize];
-					bits3[x + y * blockSize] = (Area(s2b, s2c, s3) > 0);
-					invbits3[x + y * blockSize] = !bits3[x + y * blockSize];
+					bits1[x + y * blockSize] = tanh(2.0 * Dist(s1, s2a, s3));
+					invbits1[x + y * blockSize] = -bits1[x + y * blockSize];
+					bits2[x + y * blockSize] = tanh(2.0 * Dist(s1, s2b, s3));
+					invbits2[x + y * blockSize] = -bits2[x + y * blockSize];
+					bits3[x + y * blockSize] = tanh(2.0 * Dist(s2b, s2c, s3));
+					invbits3[x + y * blockSize] = -bits3[x + y * blockSize];
 				}
 			}
 			if (!(basisSet.contains(bits1) || basisSet.contains(invbits1)))
@@ -387,42 +406,21 @@ std::vector<std::vector<bool> > distinctLineShapes(int blockSize) {
 	return std::vector(basisSet.cbegin(), basisSet.cend());
 }
 
-static const double s_blurKernel[9]{
-	1.0 / 16.0, 2.0 / 16.0,1.0 / 16.0,
-	2.0 / 16.0, 4.0 / 16.0,2.0 / 16.0,
-	1.0 / 16.0, 2.0 / 16.0,1.0 / 16.0
-};
-
-math::Matrix createSegmentDictionary(int blockSize, std::vector<std::vector<bool> > basisSet) {
+math::Matrix createSegmentDictionary(int blockSize, std::vector<std::vector<double> > basisSet) {
 	math::Matrix dictionary(basisSet.size(), blockSize * blockSize);
 	int i = 0;
-	for (const std::vector<bool>& bits: basisSet) {
+	for (const std::vector<double>& bits: basisSet) {
 		double total = 0.0;
 		bool allSet = true;
 		bool allClear = true;
-		math::Vector base(blockSize * blockSize);
 		for (size_t j = 0; j < blockSize * blockSize; ++j) {
-			if (bits[j]) {
-				base[j] = +1.0;
+			if (bits[j] >= 0.0) {
 				allClear = false;
 			} else {
-				base[j] = -1.0;
 				allSet = false;
 			}
-		}
-		for (int x = 0; x < blockSize; ++x) {
-			for (int y = 0; y < blockSize; ++y) {
-				double accum = 0.0;
-				for (int dx = -1; dx < +1; ++dx) {
-					size_t u = std::clamp(x + dx, 0, blockSize - 1);
-					for (int dy = -1; dy < +1; ++dy) {
-						size_t v = std::clamp(y + dy, 0, blockSize - 1);
-						accum += s_blurKernel[dx + 1 + 3 * (dy + 1)] * base[u + v * blockSize];
-					}
-				}
-				total += accum;
-				dictionary[i][x + y * blockSize] = accum;
-			}
+			dictionary[i][j] = bits[j];
+			total += bits[j];
 		}
 		double mean = total / static_cast<double>(blockSize * blockSize);
 		double sumsq = 0.0;
@@ -447,64 +445,8 @@ math::Matrix createSegmentDictionary(int blockSize, std::vector<std::vector<bool
 }
 
 math::Matrix createSegmentDictionary(int blockSize) {
-	std::vector<std::vector<bool> > basisSet = distinctLineShapes(blockSize);
+	std::vector<std::vector<double> > basisSet = distinctLineShapes(blockSize);
 	return createSegmentDictionary(blockSize, basisSet);
-}
-
-void createSegmentKLT(int blockSize, std::vector<Pt>& part, int keep, std::vector<math::Vector>& basisVectors)
-{
-	math::Matrix covar(part.size(), part.size());
-	for (int i = 0; i < part.size(); ++i)
-	{
-		for (int j = 0; j < part.size(); ++j)
-		{
-			covar[i][j] = covariancePredictionModel(part[i].x - part[j].x, part[i].y - part[j].y);
-		}
-	}
-	math::SymmetricEigenDecomposition eigenDeco(covar);
-	math::Matrix eigenVectors = eigenDeco.EigenVectors();
-	math::Vector eigenValues = eigenDeco.EigenValues();
-	std::vector<std::pair<double, int> > sortedIndex;
-	sortedIndex.reserve(eigenValues.Length());
-	for (int i = 0; i < eigenValues.Length(); ++i) {
-		sortedIndex.push_back(std::make_pair(abs(eigenValues[i]), i));
-	}
-	std::sort(sortedIndex.begin(), sortedIndex.end(), std::greater<std::pair<double, int> >());
-	if (part.size() == blockSize * blockSize) {
-		keep = blockSize * blockSize;
-	}
-	for (size_t i = 0; i < keep; ++i) {
-		if (i==0 && part.size() == blockSize * blockSize) {
-			math::Vector dcBasis(blockSize * blockSize);
-			double normed = 1.0 / blockSize;
-			for (int i = 0; i < blockSize * blockSize; ++i) {
-				dcBasis[i] = normed;
-			}
-			basisVectors.push_back(dcBasis);
-			continue;
-		}
-		math::Vector col = eigenVectors.GetColumn(sortedIndex[i].second);
-		math::Vector fullVector(blockSize * blockSize);
-		for (size_t j = 0; j < part.size(); ++j) {
-			size_t offset = part[j].x + part[j].y * blockSize;
-			fullVector[offset] = col[j];
-		}
-		math::Vector blurredVector(blockSize * blockSize);
-		for (int x = 0; x < blockSize; ++x) {
-			for (int y = 0; y < blockSize; ++y) {
-				double tot = 0.0;
-				for (int dx = -1; dx < +1; ++dx) {
-					size_t u = std::clamp(x + dx, 0, blockSize - 1);
-					for (int dy = -1; dy < +1; ++dy) {
-						size_t v = std::clamp(y + dy, 0, blockSize - 1);
-						tot += s_blurKernel[dx + 1 + 3 * (dy + 1)] * fullVector[u + v * blockSize];
-					}
-				}
-				blurredVector[x + y * blockSize] = tot;
-			}
-		}
-		basisVectors.push_back(blurredVector);
-	}
 }
 
 void writeDictionaryToPNG(math::Matrix dictionary, std::string fileName) {
@@ -587,38 +529,43 @@ int main(int argc, char* argv[])
 			}
 			break;
 		case Mode::SEG_KLT: {
-			std::vector<std::vector<bool> > basisSet = distinctLineShapes(BlockSize);
+			std::vector<std::vector<double> > basisSet = distinctLineShapes(BlockSize);
 			baseDict = createSegmentDictionary(BlockSize, basisSet);
 			size_t fullRowCount = baseDict.Rows();
 			detailBasis = new math::Matrix[baseDict.Rows()];
 			size_t id = 0;
-			for (const std::vector<bool>& basis : basisSet) {
-				std::vector<Pt> part1;
-				std::vector<Pt> part2;
-				for (int x = 0; x < BlockSize; ++x) {
-					for (int y = 0; y < BlockSize; ++y) {
-						if (basis[x + BlockSize * y]) {
-							part1.push_back(Pt(x, y));
-						}
-						else {
-							part2.push_back(Pt(x, y));
-						}
+			for (const std::vector<double>& basis : basisSet) {
+				int count1 = 0;
+				int count2 = 0;
+				math::Matrix part1(BlockSize * BlockSize, BlockSize * BlockSize);
+				math::Matrix part2(BlockSize * BlockSize, BlockSize * BlockSize);
+				for (int x = 0; x < BlockSize * BlockSize; ++x) {
+					int x1 = x % BlockSize;
+					int y1 = x / BlockSize;
+					if (basis[x] >= 0.0) ++count1;
+					if (basis[x] <= 0.0) ++count2;
+					for (int y = 0; y < BlockSize * BlockSize; ++y) {
+						int x2 = y % BlockSize;
+						int y2 = y / BlockSize;
+						part1[x][y] = std::max(0.0, 0.5 + basis[x]) * std::max(0.0, 0.5 + basis[y]) * covariancePredictionModel(x2 - x1, y2 - y1);
+						part2[x][y] = std::max(0.0, 0.5 - basis[x]) * std::max(0.0, 0.5 - basis[y]) * covariancePredictionModel(x2 - x1, y2 - y1);
 					}
 				}
-				std::vector<math::Vector> basisVectors;
-				if (part1.size() > 2) {
-					createSegmentKLT(BlockSize, part1, static_cast<int>(part1.size()) - 1, basisVectors); // drop last basis
-					basisVectors.erase(basisVectors.begin()); // drop DC
-				}
-				if (part2.size() > 2) {
-					size_t sizeBefore = basisVectors.size();
-					createSegmentKLT(BlockSize, part2, static_cast<int>(part2.size()) - 1, basisVectors); // drop last basis
-					basisVectors.erase(basisVectors.begin() + sizeBefore); // drop DC
-				}
-				detailBasis[id] = math::Matrix(basisVectors.size(), BlockSize * BlockSize);
-				for (int i = 0; i < basisVectors.size(); ++i) {
+
+				std::vector<math::Vector> basis1 = createBasis(part1);
+				std::vector<math::Vector> basis2 = createBasis(part2);
+				int part1Count = std::max(0, count1 - 2);
+				int part2Count = std::max(0, count2 - 2);
+
+				detailBasis[id] = math::Matrix(part1Count + part2Count, BlockSize * BlockSize);
+				for (int i = 0; i < part1Count; ++i) {
 					for (int j = 0; j < BlockSize * BlockSize; ++j) {
-						detailBasis[id][i][j] = basisVectors[i][j];
+						detailBasis[id][i][j] = basis1[i + 1][j];
+					}
+				}
+				for (int i = 0; i < part2Count; ++i) {
+					for (int j = 0; j < BlockSize * BlockSize; ++j) {
+						detailBasis[id][part1Count + i][j] = basis2[i + 1][j];
 					}
 				}
 				fullRowCount += detailBasis[id].Rows();
