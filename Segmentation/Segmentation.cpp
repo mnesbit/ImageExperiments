@@ -6,6 +6,10 @@
 
 int main(int argc, char* argv[])
 {
+    if (argc != 4) {
+        std::cout << "Segmentation.exe <cluster merge rounds> <input file> <output file>" << std::endl;
+        return -1;
+    }
     int rounds = atoi(argv[1]);
     img::image<img::rgb>* imgIn = img::LoadImageGenericRGB(argv[2]);
     cluster::Clusters cluster(imgIn);
@@ -19,4 +23,5 @@ int main(int argc, char* argv[])
     }
     img::SaveImageGeneric(imgOut, argv[3], img::PNG);
     delete imgOut;
+    return 0;
 }
