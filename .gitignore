@@ -398,3 +398,6 @@ FodyWeavers.xsd
 *.sln.iml
 
 covar65x65.mat
+covar65x65Y.mat
+covar65x65U.mat
+covar65x65V.mat

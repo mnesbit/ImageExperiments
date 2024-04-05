@@ -54,10 +54,35 @@ double summedLaplaceModel(double params[6], double dx, double dy) {
 		+ 5000.0 * params[3] * exp(-(0.1 * params[4] * abs(dx) + 0.1 * params[5] * abs(dy)));
 }
 
-// fully substituted version of optimised summedLaplaceModel
-double finalModel(double dx, double dy) {
+// Fit to U component covariance
+//new improvement to : 6.1286e+07
+//0.24149, 0.134755, 0.147572,
+double uComponentModel(double params[3], double dx, double dy) {
+	return 1000.0 * params[0] * exp(-(0.01 * params[1] * abs(dx) + 0.01 * params[2] * abs(dy)));
+}
+
+// Fit to V component covariance
+//new improvement to : 1.22099e+08
+//0.371872, 0.147084, 0.152658,
+double vComponentModel(double params[3], double dx, double dy) {
+	return 1000.0 * params[0] * exp(-(0.01 * params[1] * abs(dx) + 0.01 * params[2] * abs(dy)));
+}
+
+
+// fully substituted version of optimised summedLaplaceModel for Y channel
+double finalModelY(double dx, double dy) {
 	return 3817.7299999999996 * exp(-1.48854e-05 * dx * dx + -1.7273e-05 * dy * dy)
 		+ 657.8100000000001 * exp(-0.0436057 * abs(dx) + -0.050844400000000005 * abs(dy));
+}
+
+// fully substituted version of optimised ellipticLaplaceModel for U channel
+double finalModelU(double dx, double dy) {
+	return 241.49 * exp(-0.00134755 * abs(dx) + -0.00147572 * abs(dy));
+}
+
+// fully substituted version of optimised ellipticLaplaceModel for V channel
+double finalModelV(double dx, double dy) {
+	return 371.87199999999996 * exp(-0.00147084 * abs(dx) + -0.0015265799999999998 * abs(dy));
 }
 
 double modelError(math::Matrix& covar, int N, double params[]) {
