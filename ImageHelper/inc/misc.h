@@ -54,6 +54,7 @@ typedef struct Point_Tag
 	int y;
 } Point;
 
+yuv YUVFromRGB(double red, double green, double blue);
 yuv YUVFromRGB(rgb in);
 
 rgb RGBFromYUV(yuv in);
