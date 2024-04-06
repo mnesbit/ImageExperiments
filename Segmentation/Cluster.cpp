@@ -38,6 +38,7 @@ namespace cluster {
 		size_t a;
 		size_t b;
 		int dir;
+		double grad;
 		double weight;
 	};
 
@@ -53,43 +54,60 @@ namespace cluster {
 		{
 			for (size_t x = 0; x < m_width; x++)
 			{
+				const ClusterItem& clusta = m_clusters[y * m_width + x];
 				if (x < m_width - 1)
 				{
+					const ClusterItem& clustb = m_clusters[y * m_width + (x + 1)];
+					double totx = square(1.0 * (clusta.gradx + clustb.gradx)); // summed gradient in x direction. The weighting factor of 1.0 rather than 0.5 seems a good balance between edge and patch energy
+					double toty = square(1.0 * (clusta.grady + clustb.grady)); // summed gradient in y direction The weighting factor of 1.0 rather than 0.5 seems a good balance between edge and patch energy
 					m_edges.push_back(
 						Edge{
 						.a = y * m_width + x ,
 						.b = y * m_width + (x + 1) ,
-						.dir = 0
+						.dir = 0,
+						.grad = sqrt(totx + toty)
 						}
 					);
 				}
 				if (y < m_height - 1)
 				{
+					const ClusterItem& clustb = m_clusters[(y + 1) * m_width + x];
+					double totx = square(1.0 * (clusta.gradx + clustb.gradx)); // summed gradient in x direction. The weighting factor of 1.0 rather than 0.5 seems a good balance between edge and patch energy
+					double toty = square(1.0 * (clusta.grady + clustb.grady)); // summed gradient in y direction The weighting factor of 1.0 rather than 0.5 seems a good balance between edge and patch energy
 					m_edges.push_back(
 						Edge{
 						.a = y * m_width + x ,
 						.b = (y + 1) * m_width + x ,
-						.dir = 1
+						.dir = 1,
+						.grad = sqrt(totx + toty)
 						}
 					);
 				}
 				if ((x < m_width - 1) && (y < m_height - 1))
 				{
+					const ClusterItem& clustb = m_clusters[(y + 1) * m_width + (x + 1)];
+					double totx = square(1.0 * (clusta.gradx + clustb.gradx)); // summed gradient in x direction. The weighting factor of 1.0 rather than 0.5 seems a good balance between edge and patch energy
+					double toty = square(1.0 * (clusta.grady + clustb.grady)); // summed gradient in y direction The weighting factor of 1.0 rather than 0.5 seems a good balance between edge and patch energy
 					m_edges.push_back(
 						Edge{
 						.a = y * m_width + x,
 						.b = (y + 1) * m_width + (x + 1),
-						.dir = 2
+						.dir = 2,
+						.grad = sqrt(totx + toty)
 						}
 					);
 				}
 				if ((x < m_width - 1) && (y > 0))
 				{
+					const ClusterItem& clustb = m_clusters[(y - 1) * m_width + (x + 1)];
+					double totx = square(1.0 * (clusta.gradx + clustb.gradx)); // summed gradient in x direction. The weighting factor of 1.0 rather than 0.5 seems a good balance between edge and patch energy
+					double toty = square(1.0 * (clusta.grady + clustb.grady)); // summed gradient in y direction The weighting factor of 1.0 rather than 0.5 seems a good balance between edge and patch energy
 					m_edges.push_back(
 						Edge{
 						.a = y * m_width + x ,
 						.b = (y - 1) * m_width + (x + 1) ,
-						.dir = 3
+						.dir = 3,
+						.grad = sqrt(totx + toty)
 						}
 					);
 				}
@@ -189,8 +207,8 @@ namespace cluster {
 		, m_round(0)
 	{
 		InitClusters(input);
-		InitEdges();
 		CalcGradient();
+		InitEdges();
 	}
 
 	Clusters::~Clusters() {
@@ -276,18 +294,12 @@ namespace cluster {
 		for (auto& edge : m_edges) {
 			size_t a = Find(edge.a);
 			size_t b = Find(edge.b);
-			size_t ay = edge.a / m_width;
-			size_t ax = edge.a - (m_width * ay);
-			size_t by = edge.b / m_width;
-			size_t bx = edge.b - (m_width * by);
 			double sza = (double)m_clusters[a].size;
 			double szb = (double)m_clusters[b].size;
 			img::yuv acol = img::YUVFromRGB((m_clusters[a].sumr / sza), (m_clusters[a].sumg / sza), (m_clusters[a].sumb / sza));
 			img::yuv bcol = img::YUVFromRGB((m_clusters[b].sumr / szb), (m_clusters[b].sumg / szb), (m_clusters[b].sumb / szb));
 			double tot = square(acol.y - bcol.y) + square(acol.u - bcol.u) + square(acol.v - bcol.v); //squared colour difference of adjacent regions
-			double totx = square(1.0 * (m_clusters[edge.a].gradx + m_clusters[edge.b].gradx)); // averaged gradient in x direction
-			double toty = square(1.0 * (m_clusters[edge.a].grady + m_clusters[edge.b].grady)); // averaged gradient in x direction
-			edge.weight = sqrt(totx + toty) + sqrt(tot); // by summing gradient and region difference the gradient helps form sensible groups in early rounds and layter rounds use averaged colour
+			edge.weight = edge.grad + sqrt(tot); // by summing gradient and region difference the gradient helps form sensible groups in early rounds and layter rounds use averaged colour
 		}
 		std::sort(m_edges.begin(), m_edges.end()); // sort by weight so that strongest differences are merged first
 	}
