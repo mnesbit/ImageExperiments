@@ -1,4 +1,5 @@
 #include "../inc/misc.h"
+#include <algorithm>
 
 namespace img
 {
@@ -22,9 +23,9 @@ namespace img
 	rgb RGBFromYUV(yuv in)
 	{
 		rgb retval{
-			.r = (uchar)(in.y + 1.13983 * in.v),
-			.g = (uchar)(in.y - 0.39466 * in.u - 0.58060 * in.v),
-			.b = (uchar)(in.y + 2.03211 * in.u)
+			.r = static_cast<uchar>(std::clamp(std::round(in.y + 1.13983 * in.v), 0.0, 255.0)),
+			.g = static_cast<uchar>(std::clamp(std::round(in.y - 0.39466 * in.u - 0.58060 * in.v), 0.0, 255.0)),
+			.b = static_cast<uchar>(std::clamp(std::round(in.y + 2.03211 * in.u), 0.0, 255.0))
 		};
 		return retval;
 	}

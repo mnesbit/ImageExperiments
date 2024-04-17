@@ -129,10 +129,10 @@ namespace cluster {
 				double totyb = 0.0;
 				for (int dx = -4; dx <= +4; dx++)
 				{
-					int u = bound(static_cast<int>(x) + dx, 0, static_cast<int>(m_width - 1));
+					int u = std::clamp(static_cast<int>(x) + dx, 0, static_cast<int>(m_width - 1));
 					for (int dy = -4; dy <= +4; dy++)
 					{
-						int v = bound(static_cast<int>(y) + dy, 0, static_cast<int>(m_height - 1));
+						int v = std::clamp(static_cast<int>(y) + dy, 0, static_cast<int>(m_height - 1));
 						img::rgb pt = m_clusters[v * m_width + u].orig;
 						img::yuv pt2 = img::YUVFromRGB(pt);
 						if (dx >= -2

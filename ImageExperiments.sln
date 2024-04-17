@@ -15,6 +15,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "OrthogonalMatchingPursuit",
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Segmentation", "Segmentation\Segmentation.vcxproj", "{EE2510D3-804E-4A3A-B89D-2BEF0B475A6C}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Compression", "Compression\Compression.vcxproj", "{39EFBBA3-6F65-46D7-A9C9-01BDBC34594F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -71,6 +73,14 @@ Global
 		{EE2510D3-804E-4A3A-B89D-2BEF0B475A6C}.Release|x64.Build.0 = Release|x64
 		{EE2510D3-804E-4A3A-B89D-2BEF0B475A6C}.Release|x86.ActiveCfg = Release|Win32
 		{EE2510D3-804E-4A3A-B89D-2BEF0B475A6C}.Release|x86.Build.0 = Release|Win32
+		{39EFBBA3-6F65-46D7-A9C9-01BDBC34594F}.Debug|x64.ActiveCfg = Debug|x64
+		{39EFBBA3-6F65-46D7-A9C9-01BDBC34594F}.Debug|x64.Build.0 = Debug|x64
+		{39EFBBA3-6F65-46D7-A9C9-01BDBC34594F}.Debug|x86.ActiveCfg = Debug|Win32
+		{39EFBBA3-6F65-46D7-A9C9-01BDBC34594F}.Debug|x86.Build.0 = Debug|Win32
+		{39EFBBA3-6F65-46D7-A9C9-01BDBC34594F}.Release|x64.ActiveCfg = Release|x64
+		{39EFBBA3-6F65-46D7-A9C9-01BDBC34594F}.Release|x64.Build.0 = Release|x64
+		{39EFBBA3-6F65-46D7-A9C9-01BDBC34594F}.Release|x86.ActiveCfg = Release|Win32
+		{39EFBBA3-6F65-46D7-A9C9-01BDBC34594F}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -36,11 +36,6 @@ template <class T>
 inline T square(const T &x) { return x*x; };
 
 template <class T>
-inline T bound(const T &x, const T &min, const T &max) {
-  return (x < min ? min : (x > max ? max : x));
-}
-
-template <class T>
 inline bool check_bound(const T &x, const T&min, const T &max) {
   return ((x < min) || (x > max));
 }

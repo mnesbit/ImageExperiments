@@ -64,13 +64,10 @@ Matrix::Matrix(const Matrix& matrix)
 }
 
 Matrix::Matrix(Matrix&& matrix) noexcept
-	: m(0)
-	, n(0)
-	, data(nullptr)
+	: m(matrix.m)
+	, n(matrix.n)
+	, data(matrix.data)
 {
-	m = matrix.m;
-	n = matrix.n;
-	data = matrix.data;
 	matrix.m = 0;
 	matrix.n = 0;
 	matrix.data = nullptr;

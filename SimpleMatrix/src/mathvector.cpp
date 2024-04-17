@@ -45,11 +45,9 @@ Vector::Vector(const Vector& vector)
 }
 
 Vector::Vector(Vector&& vector) noexcept
-	: m(0)
-	, data(nullptr)
+	: m(vector.m)
+	, data(vector.data)
 {
-	m = vector.m;
-	data = vector.data;
 	vector.m = 0;
 	vector.data = nullptr;
 }

@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <gdiplus.h>
 #include <stdio.h>
+#include <algorithm>
 #include "../inc/imgloader.h"
 #include "../inc/pnmfile.h"
 #include "../inc/misc.h"
@@ -305,7 +306,7 @@ void SaveImageGeneric(const image<double>* img,const char* filename,imgFormat fo
 	{
 		for(size_t y=0;y<height;y++)
 		{
-			uchar value=(uchar)bound(255.0*((imRef(img,x,y)-min)/(max-min)),0.0,255.0);
+			uchar value=(uchar)std::clamp(255.0*((imRef(img,x,y)-min)/(max-min)),0.0,255.0);
 			imRef(tmpImg,x,y).r=value;
 			imRef(tmpImg,x,y).g=value;
 			imRef(tmpImg,x,y).b=value;
