@@ -1,10 +1,12 @@
 #ifndef _BASIS_SET_H_
 #define _BASIS_SET_H_
 
+#include "framework.h"
+
 #include <vector>
 #include <functional>
-#include "../SimpleMatrix/inc/mathvector.h"
-#include "../SimpleMatrix/inc/mathmatrix.h"
+#include "../../SimpleMatrix/inc/mathmatrix.h"
+#include "../../SimpleMatrix/inc/mathvector.h"
 
 namespace basis {
 	typedef std::function<double(double, double)> CovarianceModel;

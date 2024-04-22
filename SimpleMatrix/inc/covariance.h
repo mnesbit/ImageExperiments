@@ -7,6 +7,19 @@
 #include "mathmatrix.h"
 
 namespace math {
+	struct Stat {
+		double N;
+		double min;
+		double max;
+		double mean;
+		double sumSq;
+
+		void update(double val);
+
+		double sampleVariance() const;
+	};
+
+
 	class CovarianceCalculator {
 	public:
 		CovarianceCalculator();

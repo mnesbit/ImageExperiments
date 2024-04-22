@@ -9,81 +9,124 @@
 #include <cstdlib>
 #include <fstream>
 #include <map>
-#include "MatchingPursuit.h"
-#include "BitBuffer.h"
-#include "BasisSet.h"
+#include "../CompressionLib/inc/MatchingPursuit.h"
+#include "../CompressionLib/inc/BitBuffer.h"
+#include "../CompressionLib/inc/BasisSet.h"
+#include "../CompressionLib/inc/Huffman.h"
+#include "../CompressionLib/inc/CompressedImage.h"
 #include "../ImageHelper/inc/imgloader.h"
-#include "../SimpleMatrix/inc/covariance.h"
-#include "../SimpleMatrix/inc/symmeigen.h"
-#include "../ImageHelper/inc/misc.h"
 
 using namespace img;
 using namespace matching;
+using namespace compressed;
 using namespace bitbuffer;
 using namespace basis;
 
-static double s_quantY[32] = {
-	4.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-	1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-	1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-	1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+static const double s_quantY[32] = {
+10.0,
+1.0,
+1.6,
+5.8,
+5.2,
+9.4,
+8.5,
+7.6,
+13.7,
+12.3,
+11.1,
+10.0,
+9.0,
+16.2,
+14.6,
+13.1,
+11.8,
+10.6,
+9.6,
+8.6,
+7.8,
+7.0,
+6.3,
+5.7,
+5.1,
+4.6,
+4.1,
+3.7,
+3.3,
+3.0,
+2.7,
+2.4,
 };
 
 static const double s_quantU[32] = {
-	4.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-	1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-	1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-	1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+10.0,
+1.8,
+12.9,
+23.2,
+41.8,
+37.6,
+67.8,
+61.0,
+54.9,
+49.4,
+44.5,
+40.0,
+36.0,
+32.4,
+58.3,
+52.5,
+47.3,
+42.5,
+38.3,
+34.4,
+31.0,
+27.9,
+25.1,
+22.6,
+20.3,
+18.3,
+16.5,
+14.8,
+13.3,
+12.0,
+10.8,
+4.9,
 };
 
 static const double s_quantV[32] = {
-	4.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-	1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-	1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-	1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+10.0,
+1.8,
+12.9,
+23.2,
+41.8,
+75.3,
+67.8,
+61.0,
+54.9,
+98.8,
+88.9,
+80.0,
+72.0,
+64.8,
+58.3,
+52.5,
+47.3,
+42.5,
+38.3,
+34.4,
+31.0,
+27.9,
+25.1,
+22.6,
+20.3,
+9.2,
+8.2,
+7.4,
+6.7,
+6.0,
+5.4,
+4.9,
 };
 
-static const uint32_t s_golCY[32] = {
-511, 63, 31, 31, 15, 15, 15, 15,
-15, 15, 7, 7, 7, 7, 7, 7,
-7, 7, 7, 7, 7, 7, 7, 7,
-3, 3, 3, 3, 3, 3, 3, 3,
-};
-
-static const uint32_t s_golSY[32] = {
-1, 511, 255, 255, 255, 255, 255, 255,
-255, 255, 255, 255, 255, 255, 255, 255,
-255, 255, 255, 255, 255, 255, 255, 255,
-255, 255, 255, 255, 255, 255, 255, 255,
-};
-
-static const uint32_t s_golCU[32] = {
-63, 15, 7, 3, 3, 3, 3, 3,
-3, 3, 3, 3, 3, 3, 3, 3,
-3, 3, 3, 3, 3, 3, 3, 3,
-3, 3, 3, 3, 3, 3, 3, 3,
-};
-
-static const uint32_t s_golSU[32] = {
-1, 511, 255, 255, 255, 255, 255, 255,
-255, 255, 255, 255, 255, 255, 255, 255,
-255, 255, 255, 255, 255, 255, 255, 255,
-255, 255, 255, 255, 255, 255, 255, 255,
-};
-
-static const uint32_t s_golCV[32] = {
-31, 15, 7, 3, 3, 3, 3, 3,
-3, 3, 3, 3, 3, 3, 3, 3,
-3, 3, 3, 3, 3, 3, 3, 3,
-3, 3, 3, 3, 3, 3, 3, 3,
-};
-
-static const uint32_t s_golSV[32] = {
-7, 511, 255, 255, 255, 255, 255, 255,
-255, 255, 255, 255, 255, 255, 255, 255,
-255, 255, 255, 255, 255, 255, 255, 255,
-255, 255, 255, 255, 255, 255, 255, 255,
-};
 
 std::vector<std::string> readFiles(std::string path) {
 	struct stat sb;
@@ -108,243 +151,6 @@ std::vector<std::string> readFiles(std::string path) {
 	return results;
 }
 
-struct Stat {
-	double N;
-	double min;
-	double max;
-	double mean;
-	double sumSq;
-
-	void update(double val) {
-		if (N == 0) {
-			N = 1.0;
-			min = val;
-			max = val;
-			mean = val;
-			sumSq = 0.0;
-		} else {
-			if (val < min) min = val;
-			if (val > max) max = val;
-			N += 1.0;
-			double delta = val - mean;
-			mean += delta / N;
-			double delta2 = val - mean;
-			sumSq += delta * delta2;
-		}
-	}
-
-	double sampleVariance() const {
-		return sumSq / (N - 1.0);
-	}
-};
-
-std::unique_ptr<uint8_t[]> encodeImage(const image<rgb>* imgIn, const size_t K, const size_t blockSize,
-	DynamicDictionaryFunction dynamicY, DynamicDictionaryFunction dynamicU, DynamicDictionaryFunction dynamicV,
-	size_t& outputByteSize) {
-	const size_t width = imgIn->width();
-	const size_t height = imgIn->height();
-	BitBuffer bitsOut;
-	bitsOut.WriteInt(static_cast<uint32_t>(width));
-	bitsOut.WriteInt(static_cast<uint32_t>(height));
-	std::vector<BasisChoice> choicesY(K);
-	std::vector<BasisChoice> choicesU(K);
-	std::vector<BasisChoice> choicesV(K);
-	math::Vector blockY(blockSize * blockSize);
-	math::Vector blockU(blockSize * blockSize);
-	math::Vector blockV(blockSize * blockSize);
-	for (size_t x = 0; x < width; x += blockSize) {
-		std::cout << std::format("encode {} %", (100 * x) / width) << std::endl;
-		for (size_t y = 0; y < height; y += blockSize) {
-			for (size_t dx = 0; dx < blockSize; ++dx) {
-				size_t u = x + dx;
-				for (size_t dy = 0; dy < blockSize; ++dy) {
-					size_t v = y + dy;
-					if ((u < width) && (v < height)) {
-						rgb pt = imRef(imgIn, u, v);
-						yuv col = YUVFromRGB(pt);
-						blockY[dx + (blockSize * dy)] = col.y;
-						blockU[dx + (blockSize * dy)] = col.u;
-						blockV[dx + (blockSize * dy)] = col.v;
-					} else {
-						blockY[dx + (blockSize * dy)] = 0.0;
-						blockU[dx + (blockSize * dy)] = 0.0;
-						blockV[dx + (blockSize * dy)] = 0.0;
-					}
-				}
-			}
-			size_t countY = CalcMPDynamic(K, s_quantY, choicesY, blockY, dynamicY);
-			bitsOut.WriteBits(countY, std::bit_width(K));
-			if (countY > 0) {
-				if (choicesY[0].deltaId == 0) { // almost always DC components first
-					bitsOut.WriteBits(0, 1);
-					writeGolombCode(choicesY[0].intCoeff, s_golCY[0], bitsOut);
-				} else {
-					bitsOut.WriteBits(1, 1);
-					writeGolombCode(choicesY[0].deltaId, s_golSY[0], bitsOut);
-					writeGolombCode(choicesY[0].intCoeff, s_golCY[0], bitsOut);
-				}
-				for (int i = 1; i < countY; ++i) {
-					writeGolombCode(choicesY[i].deltaId, s_golSY[i], bitsOut);
-					writeGolombCode(choicesY[i].intCoeff, s_golCY[i], bitsOut);
-				}
-			}
-			size_t countU = CalcMPDynamic(K, s_quantU, choicesU, blockU, dynamicU);
-			bitsOut.WriteBits(countU, std::bit_width(K));
-			if (countU > 0) {
-				if (choicesU[0].deltaId == 0) { // almost always DC components first
-					bitsOut.WriteBits(0, 1);
-					writeGolombCode(choicesU[0].intCoeff, s_golCU[0], bitsOut);
-				} else {
-					bitsOut.WriteBits(1, 1);
-					writeGolombCode(choicesU[0].deltaId, s_golSU[0], bitsOut);
-					writeGolombCode(choicesU[0].intCoeff, s_golCU[0], bitsOut);
-				}
-				for (int i = 1; i < countU; ++i) {
-					writeGolombCode(choicesU[i].deltaId, s_golSU[i], bitsOut);
-					writeGolombCode(choicesU[i].intCoeff, s_golCU[i], bitsOut);
-				}
-			}
-			size_t countV = CalcMPDynamic(K, s_quantV, choicesV, blockV, dynamicV);
-			bitsOut.WriteBits(countV, std::bit_width(K));
-			if (countV > 0) {
-				if (choicesV[0].deltaId == 0) { // almost always DC components first
-					bitsOut.WriteBits(0, 1);
-					writeGolombCode(choicesV[0].intCoeff, s_golCV[0], bitsOut);
-				} else {
-					bitsOut.WriteBits(1, 1);
-					writeGolombCode(choicesV[0].deltaId, s_golSV[0], bitsOut);
-					writeGolombCode(choicesV[0].intCoeff, s_golCV[0], bitsOut);
-				}
-				for (int i = 1; i < countV; ++i) {
-					writeGolombCode(choicesV[i].deltaId, s_golSV[i], bitsOut);
-					writeGolombCode(choicesV[i].intCoeff, s_golCV[i], bitsOut);
-				}
-			}
-		}
-	}
-	return bitsOut.Save(outputByteSize);
-}
-
-image<rgb>* decodeImage(const size_t K, const size_t blockSize,const uint8_t bytes[], size_t byteSize,
-	DynamicDictionaryFunction dynamicY, DynamicDictionaryFunction dynamicU, DynamicDictionaryFunction dynamicV,
-	const image<rgb>* original, double& squaredError) {
-	BitBuffer bitsIn;
-	size_t lengthsCY[64];
-	size_t lengthsCU[64];
-	size_t lengthsCV[64];
-	size_t lengthsSY[64];
-	size_t lengthsSU[64];
-	size_t lengthsSV[64];
-	for (int i = 0; i < 64; ++i) {
-		lengthsCY[i] = 0;
-		lengthsCU[i] = 0;
-		lengthsCV[i] = 0;
-		lengthsSY[i] = 0;
-		lengthsSU[i] = 0;
-		lengthsSV[i] = 0;
-	}
-	bitsIn.Load(bytes, 0ULL, 8ULL * byteSize);
-	const size_t width = static_cast<size_t>(bitsIn.ReadInt());
-	const size_t height = static_cast<size_t>(bitsIn.ReadInt());
-	image<rgb>* imgOut = new image<rgb>(width, height, false);
-	std::vector<BasisChoice> choicesY(K);
-	std::vector<BasisChoice> choicesU(K);
-	std::vector<BasisChoice> choicesV(K);
-	for (size_t x = 0; x < width; x += blockSize) {
-		std::cout << std::format("decode {} %", (100 * x) / width) << std::endl;
-		for (size_t y = 0; y < height; y += blockSize) {
-			size_t countY = bitsIn.ReadBits(std::bit_width(K));
-			lengthsSY[0] += std::bit_width(K);
-			if (countY > 0) {
-				if (bitsIn.ReadBits(1) == 0) {
-					choicesY[0].deltaId = 0;
-					choicesY[0].intCoeff = readGolombCode(s_golCY[0], bitsIn);
-					lengthsSY[0] += 1;
-					lengthsCY[0] += golombCodeLength(choicesY[0].intCoeff, s_golCY[0]);
-				} else {
-					choicesY[0].deltaId = readGolombCode(s_golSY[0], bitsIn);
-					choicesY[0].intCoeff = readGolombCode(s_golCY[0], bitsIn);
-					lengthsSY[0] += golombCodeLength(choicesY[0].deltaId, s_golSY[0]) + 1;
-					lengthsCY[0] += golombCodeLength(choicesY[0].intCoeff, s_golCY[0]);
-				}
-				for (int i = 1; i < countY; ++i) {
-					choicesY[i].deltaId = readGolombCode(s_golSY[i], bitsIn);
-					choicesY[i].intCoeff = readGolombCode(s_golCY[i], bitsIn);
-					lengthsSY[i] += golombCodeLength(choicesY[i].deltaId, s_golSY[i]);
-					lengthsCY[i] += golombCodeLength(choicesY[i].intCoeff, s_golCY[i]);
-				}
-			}
-			math::Vector decodedY = FromCoeffsDynamic(countY, s_quantY, choicesY, dynamicY);
-			size_t countU = bitsIn.ReadBits(std::bit_width(K));
-			lengthsSU[0] += std::bit_width(K);
-			if (countU > 0) {
-				if (bitsIn.ReadBits(1) == 0) {
-					choicesU[0].deltaId = 0;
-					choicesU[0].intCoeff = readGolombCode(s_golCU[0], bitsIn);
-					lengthsSU[0] += 1;
-					lengthsCU[0] += golombCodeLength(choicesU[0].intCoeff, s_golCU[0]);
-				} else {
-					choicesU[0].deltaId = readGolombCode(s_golSU[0], bitsIn);
-					choicesU[0].intCoeff = readGolombCode(s_golCU[0], bitsIn);
-					lengthsSU[0] += golombCodeLength(choicesU[0].deltaId, s_golSU[0]) + 1;
-					lengthsCU[0] += golombCodeLength(choicesU[0].intCoeff, s_golCU[0]);
-				}
-				for (int i = 1; i < countU; ++i) {
-					choicesU[i].deltaId = readGolombCode(s_golSU[i], bitsIn);
-					choicesU[i].intCoeff = readGolombCode(s_golCU[i], bitsIn);
-					lengthsSU[i] += golombCodeLength(choicesU[i].deltaId, s_golSU[i]);
-					lengthsCU[i] += golombCodeLength(choicesU[i].intCoeff, s_golCU[i]);
-				}
-			}
-			math::Vector decodedU = FromCoeffsDynamic(countU, s_quantU, choicesU, dynamicU);
-			size_t countV = bitsIn.ReadBits(std::bit_width(K));
-			lengthsSV[0] += std::bit_width(K);
-			if (countV > 0) {
-				if (bitsIn.ReadBits(1) == 0) {
-					choicesV[0].deltaId = 0;
-					choicesV[0].intCoeff = readGolombCode(s_golCV[0], bitsIn);
-					lengthsSV[0] += 1;
-					lengthsCV[0] += golombCodeLength(choicesV[0].intCoeff, s_golCV[0]);
-				} else {
-					choicesV[0].deltaId = readGolombCode(s_golSV[0], bitsIn);
-					choicesV[0].intCoeff = readGolombCode(s_golCV[0], bitsIn);
-					lengthsSV[0] += golombCodeLength(choicesV[0].deltaId, s_golSV[0]) + 1;
-					lengthsCV[0] += golombCodeLength(choicesV[0].intCoeff, s_golCV[0]);
-				}
-				for (int i = 1; i < countV; ++i) {
-					choicesV[i].deltaId = readGolombCode(s_golSV[i], bitsIn);
-					choicesV[i].intCoeff = readGolombCode(s_golCV[i], bitsIn);
-					lengthsSV[i] += golombCodeLength(choicesV[i].deltaId, s_golSV[i]);
-					lengthsCV[i] += golombCodeLength(choicesV[i].intCoeff, s_golCV[i]);
-				}
-			}
-			math::Vector decodedV = FromCoeffsDynamic(countV, s_quantV, choicesV, dynamicV);
-			for (size_t dx = 0; dx < blockSize; ++dx) {
-				size_t u = x + dx;
-				for (size_t dy = 0; dy < blockSize; ++dy) {
-					size_t v = y + dy;
-					if ((u < width) && (v < height)) {
-						rgb ptOrig = imRef(original, u, v);
-						rgb pt = RGBFromYUV(yuv{
-							.y = decodedY[dx + (blockSize * dy)],
-							.u = decodedU[dx + (blockSize * dy)],
-							.v = decodedV[dx + (blockSize * dy)]
-							});
-						imRef(imgOut, u, v) = pt;
-						double errR = static_cast<double>(ptOrig.r) - static_cast<double>(pt.r);
-						double errG = static_cast<double>(ptOrig.g) - static_cast<double>(pt.g);
-						double errB = static_cast<double>(ptOrig.b) - static_cast<double>(pt.b);
-						squaredError += square(errR) + square(errG) + square(errB);
-					}
-				}
-			}
-		}
-	}
-	for (int i = 0; i < 64; ++i) {
-		std::cout << std::format("index {} Y bits {}/{} U bits {}/{} V bits {}/{}", i, lengthsSY[i], lengthsCY[i], lengthsSU[i], lengthsCU[i], lengthsSV[i], lengthsCV[i]) << std::endl;
-	}
-	return imgOut;
-}
 
 int main(int argc, char* argv[]) {
 	if (argc != 3) {
@@ -383,7 +189,7 @@ int main(int argc, char* argv[]) {
 		math::Matrix dictionary(atomCount, BlockSize * BlockSize);
 		double* pDict = dictionary.Data();
 		memcpy(pDict, baseDict.Data(), sizeof(double) * baseDict.Rows() * baseDict.Columns());
-		int offset = baseDict.Rows();
+		size_t offset = baseDict.Rows();
 		choice = 0;
 		for (int i = 0; i < prevCoeffs; ++i) {
 			if (i > 0) {
@@ -395,7 +201,7 @@ int main(int argc, char* argv[]) {
 				&& choice < baseDict.Rows()) {
 				const math::Matrix& detail = detailBasis[choice];
 				memcpy(pDict + (offset * BlockSize * BlockSize), detail.Data(), sizeof(double) * detail.Rows() * detail.Columns());
-				offset += static_cast<size_t>(detail.Rows());
+				offset += static_cast<int>(detail.Rows());
 			}
 		}
 		return dictionary;
@@ -409,18 +215,33 @@ int main(int argc, char* argv[]) {
 	auto dynamicV = [&](int prevCoeffs, const std::vector<BasisChoice>& prevChoices)  -> math::Matrix {
 		return dynamic(prevCoeffs, prevChoices, detailBasisV);
 		};
+
 	image<rgb>* imgIn = LoadImageGenericRGB(argv[1]);
 	std::cout << std::format("start processing image {} using largest {} coefficients.", argv[1], K) << std::endl;
 	size_t outputBytesSize;
-	std::unique_ptr<uint8_t[]> encodedBytes = encodeImage(imgIn, K, BlockSize, dynamicY, dynamicU, dynamicV, outputBytesSize);
+	std::unique_ptr<uint8_t[]> encodedBytes = encodeImage(
+		imgIn,
+		K,
+		BlockSize,
+		s_quantY, s_quantU, s_quantV,
+		dynamicY, dynamicU, dynamicV,
+		outputBytesSize);
+
 	double squaredError = 0.0;
-	image<rgb>* imgOut = decodeImage(K, BlockSize, encodedBytes.get(), outputBytesSize, dynamicY, dynamicU, dynamicV, imgIn, squaredError);
+	image<rgb>* imgOut = decodeImageWithError(
+		K,
+		BlockSize,
+		encodedBytes.get(),
+		outputBytesSize,
+		s_quantY, s_quantU, s_quantV,
+		dynamicY, dynamicU, dynamicV,
+		imgIn, squaredError);
 	double mse = squaredError / (imgOut->width() * imgOut->height());
 	double psnr = 20.0 * log10(3.0 * 255.0) - 10.0 * log10(mse);
 	std::cout << std::format("PSNR {} bpp {} total KB {}", psnr, static_cast<double>(8ULL * outputBytesSize)/static_cast<double>(imgOut->width() * imgOut->height()), outputBytesSize / 1024ULL) << std::endl;
 	SaveImageGeneric(imgOut, argv[2], imgFormat::PNG);
 	delete imgOut;
-	//const auto files = readFiles(argv[1]);
+	//const auto files = readFiles("D:\\Test\\RAISE");
 	//math::Vector patchY(BlockSize * BlockSize);
 	//math::Vector patchU(BlockSize * BlockSize);
 	//math::Vector patchV(BlockSize * BlockSize);
@@ -430,12 +251,12 @@ int main(int argc, char* argv[]) {
 	//std::mt19937 rand;
 	//rand.seed(2345678);
 	//const int patchesPerImage = 2000;
-	//Stat coeffStatsY[K];
-	//Stat selectStatsY[K];
-	//Stat coeffStatsU[K];
-	//Stat selectStatsU[K];
-	//Stat coeffStatsV[K];
-	//Stat selectStatsV[K];
+	//math::Stat coeffStatsY[K];
+	//math::Stat selectStatsY[K];
+	//math::Stat coeffStatsU[K];
+	//math::Stat selectStatsU[K];
+	//math::Stat coeffStatsV[K];
+	//math::Stat selectStatsV[K];
 	//for (size_t count = 0; count < files.size(); ++count) {
 	//	std::string file = files[count];
 	//	std::string lowerCaseName(file.size(), 0);
@@ -460,42 +281,33 @@ int main(int argc, char* argv[]) {
 	//					patchV[offx + offy * BlockSize] = col.v;
 	//				}
 	//			}
-	//			CalcMPDynamic(K, s_quantY, choicesY, patchY, dynamicY);
-	//			for (int i = 0; i < K; ++i) {
+	//			int countY = CalcMPDynamic(K, s_quantY, choicesY, patchY, dynamicY);
+	//			for (int i = 0; i < countY; ++i) {
 	//				unsigned short delta = choicesY[i].deltaId;
 	//				unsigned short coeff = choicesY[i].intCoeff;
 	//				coeffStatsY[i].update((coeff));
 	//				selectStatsY[i].update((delta));
-	//				if (delta == 0 && coeff == 0) {
-	//					break;
-	//				}
 	//			}
-	//			CalcMPDynamic(K, s_quantU, choicesU, patchU, dynamicU);
-	//			for (int i = 0; i < K; ++i) {
+	//			int countU = CalcMPDynamic(K, s_quantU, choicesU, patchU, dynamicU);
+	//			for (int i = 0; i < countU; ++i) {
 	//				unsigned short delta = choicesU[i].deltaId;
 	//				unsigned short coeff = choicesU[i].intCoeff;
 	//				coeffStatsU[i].update((coeff));
 	//				selectStatsU[i].update((delta));
-	//				if (delta == 0 && coeff == 0) {
-	//					break;
-	//				}
 	//			}
-	//			CalcMPDynamic(K, s_quantV, choicesV, patchV, dynamicV);
-	//			for (int i = 0; i < K; ++i) {
+	//			int countV = CalcMPDynamic(K, s_quantV, choicesV, patchV, dynamicV);
+	//			for (int i = 0; i < countV; ++i) {
 	//				unsigned short delta = choicesV[i].deltaId;
 	//				unsigned short coeff = choicesV[i].intCoeff;
 	//				coeffStatsV[i].update((coeff));
 	//				selectStatsV[i].update((delta));
-	//				if (delta == 0 && coeff == 0) {
-	//					break;
-	//				}
 	//			}
 	//		}
 	//		delete image;
 	//	}
 	//}
 	//std::ofstream fileOut;
-	//fileOut.open(argv[2], std::ios::out|std::ios::trunc);
+	//fileOut.open("C:\\Temp\\results5.txt", std::ios::out | std::ios::trunc);
 	//fileOut << "Y coeff stats" << std::endl;
 	//for (int i = 0; i < K; ++i) {
 	//	fileOut << std::format("coeff {} min {} max {} mean {} variance {}", i, coeffStatsY[i].min, coeffStatsY[i].max, coeffStatsY[i].mean, coeffStatsY[i].sampleVariance()) << std::endl;
@@ -701,13 +513,13 @@ int main(int argc, char* argv[]) {
 	//std::vector<BasisChoice> choicesY(K);
 	//std::mt19937 rand;
 	//rand.seed(2345678);
-	//std::vector<double> shift(63);
-	//std::vector<double> peak(63);
-	//for (int i = 0; i < 63; ++i) {
+	//std::vector<double> shift(31);
+	//std::vector<double> peak(31);
+	//for (int i = 0; i < 31; ++i) {
 	//	shift[i] = 0.5;
 	//}
 	//for (int iter = 0;iter < 1000;++iter) {
-	//	for (int choice = 1; choice < 64; ++choice) {
+	//	for (int choice = 1; choice < 31; ++choice) {
 	//		while (true) {
 	//			double totalError = 0.0;
 	//			double N = 0.0;
@@ -734,8 +546,8 @@ int main(int argc, char* argv[]) {
 	//							patchY[offx + offy * BlockSize] = pt;
 	//						}
 	//					}
-	//					CalcMPDynamic(K, s_quantY, choicesY, patchY, dynamicY);
-	//					math::Vector decodedY = FromCoeffsDynamic(K, s_quantY, choicesY, dynamicY);
+	//					int countY = CalcMPDynamic(K, s_quantY, choicesY, patchY, dynamicY);
+	//					math::Vector decodedY = FromCoeffsDynamic(countY, s_quantY, choicesY, dynamicY);
 	//					for (int offx = 0; offx < BlockSize; ++offx) {
 	//						for (int offy = 0; offy < BlockSize; ++offy) {
 	//							double pt = imRef(image, x + offx, y + offy);
@@ -749,13 +561,13 @@ int main(int argc, char* argv[]) {
 	//			}
 	//			double mse = totalError / N;
 	//			double psnr = 20.0 * log10(255.0) - 10.0 * log10(mse);
-	//			if (psnr < 45.0) {
+	//			if (psnr < 50.0) {
 	//				std::cout << std::format("fail choice {} at {} with psnr {}", choice, s_quantY[choice], psnr) << std::endl;
 	//				s_quantY[choice] = std::max(s_quantY[choice] - shift[choice - 1], 1.0);
 	//				shift[choice - 1] = std::max(shift[choice - 1] / 2.0, 0.125);
 	//				break;
 	//			} else {
-	//				for (int i = 0; i < BlockSize * BlockSize; ++i) {
+	//				for (int i = 0; i < K; ++i) {
 	//					std::cout << s_quantY[i] << ", ";
 	//				}
 	//				std::cout << psnr << std::endl;

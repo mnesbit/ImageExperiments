@@ -1,20 +1,14 @@
 #ifndef _BIT_BUFFER_H_
 #define _BIT_BUFFER_H_
 
+#include "framework.h"
+
 #include <vector>
 #include <iostream>
 #include <bitset>
 #include <format>
 
 namespace bitbuffer {
-
-	inline int32_t zigzagDecode(uint32_t x) {
-		return static_cast<int32_t>(((x >> 1) ^ -(static_cast<int64_t>(x) & 1)));
-	}
-
-	inline uint32_t zigzagEncode(int32_t x) {
-		return (static_cast<uint32_t>(x) << 1) ^ (x >> 31);
-	}
 
 	class BitBuffer {
 	public:
@@ -29,6 +23,14 @@ namespace bitbuffer {
 
 		size_t Size() const {
 			return 64ULL * m_writeWordPos + m_writeBitPos;
+		}
+
+		size_t ReadPos() const {
+			return 64ULL * m_readWordPos + m_readBitPos;
+		}
+
+		size_t Remaining() const {
+			return (m_writeWordPos - m_readWordPos) * 64ULL + m_writeBitPos - m_readBitPos;
 		}
 
 		size_t ByteSize() const {
@@ -72,6 +74,8 @@ namespace bitbuffer {
 			return ReadBits(64);
 		}
 
+		void Append(BitBuffer& source);
+
 		std::unique_ptr<uint8_t[]> Save(size_t& byteLength) const;
 		void Load(const uint8_t bytes[], size_t startByteOffset, size_t bitLength);
 
@@ -105,14 +109,25 @@ namespace bitbuffer {
 		size_t m_readBitPos;
 	};
 
+	inline int32_t zigzagDecode(uint32_t x) {
+		return static_cast<int32_t>(((x >> 1) ^ -(static_cast<int64_t>(x) & 1)));
+	}
+
+	inline uint32_t zigzagEncode(int32_t x) {
+		return (static_cast<uint32_t>(x) << 1) ^ (x >> 31);
+	}
+
 	void writeGolombCode(uint32_t value, uint32_t M, BitBuffer& buffer);
 	uint32_t readGolombCode(uint32_t M, BitBuffer& buffer);
-	uint8_t golombCodeLength(uint32_t value, uint32_t M);
+	uint32_t golombCodeLength(uint32_t value, uint32_t M);
 
 	void writeEliasCode(uint32_t value, BitBuffer& buffer);
 	uint32_t readEliasCode(BitBuffer& buffer);
-	uint8_t eliasCodeLength(uint32_t value);
+	uint32_t eliasCodeLength(uint32_t value);
 
+	void writeEliasFanoSequenceCode(const std::vector<uint16_t>& nonDecreasingSequence, uint16_t maxSymbol, BitBuffer& buffer);
+	std::vector<uint16_t> readEliasFanoSequenceCode(size_t sequenceLength, uint16_t maxSymbol, BitBuffer& buffer);
+	uint32_t eliasFanoSequenceCodeLength(size_t sequenceLength, uint16_t maxSymbol); // upper bound estimate
 }
 
 #endif// _BIT_BUFFER_H_

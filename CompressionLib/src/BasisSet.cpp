@@ -1,5 +1,5 @@
-#include "BasisSet.h"
-#include "../SimpleMatrix/inc/symmeigen.h"
+#include "../inc/BasisSet.h"
+#include "../../SimpleMatrix/inc/symmeigen.h"
 #include <set>
 #include <algorithm>
 

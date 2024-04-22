@@ -1,6 +1,5 @@
-#include "MatchingPursuit.h"
-
-#include "BitBuffer.h"
+#include "../inc/MatchingPursuit.h"
+#include "../inc/BitBuffer.h"
 #include <algorithm>
 
 namespace matching {

@@ -2,6 +2,28 @@
 
 namespace math {
 
+void Stat::update(double val) {
+	if (N == 0) {
+		N = 1.0;
+		min = val;
+		max = val;
+		mean = val;
+		sumSq = 0.0;
+	} else {
+		if (val < min) min = val;
+		if (val > max) max = val;
+		N += 1.0;
+		double delta = val - mean;
+		mean += delta / N;
+		double delta2 = val - mean;
+		sumSq += delta * delta2;
+	}
+}
+
+double Stat::sampleVariance() const {
+	return sumSq / (N - 1.0);
+}
+
 CovarianceCalculator::CovarianceCalculator()
 	: m_N(0),
 	m_means(),

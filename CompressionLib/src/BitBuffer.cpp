@@ -1,4 +1,4 @@
-#include "bitbuffer.h"
+#include "../inc/BitBuffer.h"
 #include <stdexcept>
 #include <cstdlib>
 #include <bit>
@@ -88,6 +88,9 @@ namespace bitbuffer {
 		}
 		size_t endpos = m_writeBitPos + width;
 		uint64_t mask = (1ULL << width) - 1ULL;
+		if (width == 64) {
+			mask = 0xFFFFFFFFFFFFFFFFULL;
+		}
 		uint64_t maskedValue = (value & mask);
 		if (endpos <= 64) {
 			uint64_t shiftedValue = maskedValue << (64 - endpos);
@@ -108,11 +111,7 @@ namespace bitbuffer {
 
 	uint64_t BitBuffer::ReadBits(int width) {
 		uint64_t retval = PeekBits(width);
-		m_readBitPos += width;
-		if (m_readBitPos >= 64) {
-			m_readBitPos -= 64;
-			++m_readWordPos;
-		}
+		SkipBits(width);
 		return retval;
 	}
 
@@ -126,6 +125,9 @@ namespace bitbuffer {
 		}
 		size_t endpos = m_readBitPos + width;
 		uint64_t mask = (1ULL << width) - 1ULL;
+		if (width == 64) {
+			mask = 0xFFFFFFFFFFFFFFFFULL;
+		}
 		uint64_t retval;
 		if (endpos <= 64) {
 			retval = (m_bits[m_readWordPos] >> (64 - endpos)) & mask;
@@ -164,6 +166,18 @@ namespace bitbuffer {
 		m_writeBitPos = 0;
 		m_readWordPos = 0;
 		m_readBitPos = 0;
+	}
+
+	void BitBuffer::Append(BitBuffer& source) {
+		size_t remaining = source.Remaining();
+		while (remaining > 0ULL) {
+			if (remaining >= 64ULL) {
+				WriteLong(source.ReadLong());
+			} else {
+				WriteBits(source.ReadBits(static_cast<int32_t>(remaining)), static_cast<int32_t>(remaining));
+			}
+			remaining = source.Remaining();
+		}
 	}
 
 	std::unique_ptr<uint8_t[]> BitBuffer::Save(size_t& byteLength) const {
@@ -205,7 +219,7 @@ namespace bitbuffer {
 			m_bits[offset] = value;
 		}
 		uint64_t last = 0ULL;
-		for (long long residual = 0; residual < ((m_writeBitPos + 7ULL) / 8ULL); ++residual) {
+		for (size_t residual = 0; residual < ((m_writeBitPos + 7ULL) / 8ULL); ++residual) {
 			last = last | ((static_cast<uint64_t>(bytes[startByteOffset + (8ULL * m_writeWordPos) + residual]) & 0xFFULL) << (8 * (7 - residual)));
 		}
 		m_bits[m_writeWordPos] = last;
@@ -222,7 +236,7 @@ namespace bitbuffer {
 		if (static_cast<uint32_t>(parts.rem) < limit) {
 			buffer.WriteBits(parts.rem, b);
 		} else {
-			buffer.WriteBits(static_cast<uint32_t>(parts.rem) + limit, b + 1);
+			buffer.WriteBits(static_cast<uint64_t>(parts.rem) + limit, b + 1);
 		}
 	}
 
@@ -243,7 +257,7 @@ namespace bitbuffer {
 		return q * M + rem;
 	}
 
-	uint8_t golombCodeLength(uint32_t value, uint32_t M) {
+	uint32_t golombCodeLength(uint32_t value, uint32_t M) {
 		std::div_t parts = std::div(static_cast<int32_t>(value), static_cast<int32_t>(M));
 		uint32_t b = std::bit_width(M);
 		uint32_t limit = (1 << (b + 1)) - M;
@@ -270,8 +284,72 @@ namespace bitbuffer {
 		return ((1U << n) | static_cast<uint32_t>(buffer.ReadBits(n))) - 1;
 	}
 
-	uint8_t eliasCodeLength(uint32_t value) {
+	uint32_t eliasCodeLength(uint32_t value) {
 		uint32_t b = std::bit_width(value + 1);
 		return 2 * b - 1;
+	}
+
+	void writeEliasFanoSequenceCode(const std::vector<uint16_t>& nonDecreasingSequence, uint16_t maxSymbol, BitBuffer& buffer) {
+		if (nonDecreasingSequence.empty()) {
+			return;
+		}
+		uint32_t m = std::bit_width(maxSymbol);
+		uint32_t n = static_cast<uint32_t>(nonDecreasingSequence.size());
+		uint32_t nb = std::bit_width(n);
+		uint32_t lb = (m >= nb) ? m - nb : 0;
+		uint16_t prev = nonDecreasingSequence.front();
+		uint32_t prevBucket = 0;
+		for (const uint16_t sym : nonDecreasingSequence) {
+			if (sym < prev) {
+				throw new std::range_error("Sequence must not contain any decreasing values");
+			}
+			prev = sym;
+			uint16_t bucket = sym >> lb;
+			while (prevBucket != bucket) {
+				buffer.WriteBits(0, 1);
+				++prevBucket;
+			}
+			buffer.WriteBits(1, 1);
+		}
+		for (const uint16_t sym : nonDecreasingSequence) {
+			buffer.WriteBits(sym, lb);
+		}
+	}
+
+	std::vector<uint16_t> readEliasFanoSequenceCode(size_t sequenceLength, uint16_t maxSymbol, BitBuffer& buffer) {
+		std::vector<uint16_t> result(sequenceLength);
+		if (sequenceLength == 0) {
+			return result;
+		}
+		uint32_t m = std::bit_width(maxSymbol);
+		uint32_t n = static_cast<uint32_t>(sequenceLength);
+		uint32_t nb = std::bit_width(n);
+		uint32_t lb = (m >= nb) ? m - nb : 0;
+		uint16_t bucket = 0;
+		for (uint16_t& sym: result) {
+			if (buffer.Remaining() == 0ULL) {
+				throw new std::range_error("Invalid bitstream");
+			}
+			while (buffer.ReadBits(1) == 0) {
+				++bucket;
+			}
+			sym = bucket << lb;
+		}
+		for (uint16_t& sym : result) {
+			sym |= static_cast<uint16_t>(buffer.ReadBits(lb));
+		}
+
+		return result;
+	}
+
+	uint32_t eliasFanoSequenceCodeLength(size_t sequenceLength, uint16_t maxSymbol) {
+		if (sequenceLength == 0ULL) {
+			return 0;
+		}
+		uint32_t m = std::bit_width(maxSymbol);
+		uint32_t n = static_cast<uint32_t>(sequenceLength);
+		uint32_t nb = std::bit_width(n);
+		uint32_t lb = (m >= nb) ? m - nb : 0;
+		return n * (1 + lb) + (1U << (m - lb)) - 1;
 	}
 }

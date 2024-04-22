@@ -1,9 +1,11 @@
 #ifndef _MATCHING_PURSUIT_H_
 #define _MATCHING_PURSUIT_H_
 
+#include "framework.h"
+
 #include <functional>
-#include "../SimpleMatrix/inc/mathmatrix.h"
-#include "../SimpleMatrix/inc/mathvector.h"
+#include "../../SimpleMatrix/inc/mathmatrix.h"
+#include "../../SimpleMatrix/inc/mathvector.h"
 
 namespace matching {
 
