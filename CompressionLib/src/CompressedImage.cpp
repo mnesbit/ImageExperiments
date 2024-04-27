@@ -9,7 +9,51 @@ using namespace matching;
 
 namespace compressed {
 
-	const uint32_t MAGIC = 0x34317877;
+	const uint32_t MAGIC = 0x4D4E3234;
+
+	void writeHuffmanOrGolomb(const std::vector<uint16_t>& data, BitBuffer& buffer) {
+		bitbuffer::BitBuffer tempBits;
+		huffman::huffmanEncode(data, tempBits);
+		size_t best = tempBits.Remaining();
+		int bestFit = -1;
+		int m = 1;
+		while (m < 2048) {
+			size_t estimate = 16ULL;
+			for (const auto& sym : data) {
+				estimate += golombCodeLength(static_cast<uint32_t>(sym), m);
+			}
+			if (estimate < best) {
+				best = estimate;
+				bestFit = m;
+			}
+			if ((m & 1) == 1) {
+				++m;
+			} else {
+				m = (m << 1) - 1;
+			}
+		}
+		if (bestFit == -1) {
+			buffer.WriteBits(0, 1);
+			buffer.Append(tempBits);
+		} else {
+			buffer.WriteBits(1, 1);
+			buffer.WriteShort(bestFit);
+			for (const auto& sym : data) {
+				writeGolombCode(static_cast<uint32_t>(sym), bestFit, buffer);
+			}
+		}
+	}
+
+	void readHuffmanOrGolomb(BitBuffer& buffer, size_t length, std::vector<uint16_t>& data) {
+		if (buffer.ReadBits(1) == 0) {
+			huffman::huffmanDecode(buffer, data);
+		} else {
+			int m = buffer.ReadShort();
+			for (size_t offset = 0; offset < length; ++offset) {
+				data.push_back(static_cast<uint16_t>(readGolombCode(m, buffer)));
+			}
+		}
+	}
 
 	std::unique_ptr<uint8_t[]> writeCompressed(
 		const size_t K,
@@ -23,38 +67,9 @@ namespace compressed {
 		bitsOut.WriteInt(MAGIC);
 		bitsOut.WriteInt(static_cast<uint32_t>(width));
 		bitsOut.WriteInt(static_cast<uint32_t>(height));
-		huffman::huffmanEncode(lengths, bitsOut);
+		writeHuffmanOrGolomb(lengths, bitsOut);
 		for (size_t i = 0; i < 2ULL * 3ULL * K; ++i) {
-			bitbuffer::BitBuffer tempBits;
-			huffman::huffmanEncode(codes[i], tempBits);
-			size_t best = tempBits.Remaining();
-			int bestFit = -1;
-			int m = 1;
-			while (m < 2048) {
-				size_t estimate = 16ULL;
-				for (const auto& sym : codes[i]) {
-					estimate += golombCodeLength(static_cast<uint32_t>(sym), m);
-				}
-				if (estimate < best) {
-					best = estimate;
-					bestFit = m;
-				}
-				if ((m & 1) == 1) {
-					++m;
-				} else {
-					m = (m << 1) - 1;
-				}
-			}
-			if (bestFit == -1) {
-				bitsOut.WriteBits(0, 1);
-				bitsOut.Append(tempBits);
-			} else {
-				bitsOut.WriteBits(1, 1);
-				bitsOut.WriteShort(bestFit);
-				for (const auto& sym : codes[i]) {
-					writeGolombCode(static_cast<uint32_t>(sym), bestFit, bitsOut);
-				}
-			}
+			writeHuffmanOrGolomb(codes[i], bitsOut);
 		}
 		return bitsOut.Save(outputByteSize);
 	}
@@ -132,20 +147,20 @@ namespace compressed {
 		}
 		width = static_cast<size_t>(bitsIn.ReadInt());
 		height = static_cast<size_t>(bitsIn.ReadInt());
-		huffman::huffmanDecode(bitsIn, lengths);
+		size_t patchLength = 3ULL * ((width + 7ULL) / 8ULL) * ((height + 7ULL) / 8ULL);
+		lengths.reserve(patchLength);
+		readHuffmanOrGolomb(bitsIn, patchLength, lengths);
 		for (size_t i = 0; i < 2ULL * 3ULL * K; ++i) {
-			if (bitsIn.ReadBits(1) == 0) {
-				huffman::huffmanDecode(bitsIn, codes[i]);
-			} else {
-				size_t layer = (i / 2ULL) / K;
-				size_t depth = (i / 2ULL) % K;
-				int m = bitsIn.ReadShort();
-				for (size_t offset = 0; offset < (lengths.size() / 3ULL); ++offset) {
-					if (lengths[(3ULL * offset) + layer] > static_cast<uint16_t>(depth)) {
-						codes[i].push_back(static_cast<uint16_t>(readGolombCode(m, bitsIn)));
-					}
+			size_t layer = (i / 2ULL) / K;
+			size_t depth = (i / 2ULL) % K;
+			size_t layerLength = 0ULL;
+			for (size_t offset = 0; offset < (lengths.size() / 3ULL); ++offset) {
+				if (lengths[(3ULL * offset) + layer] > static_cast<uint16_t>(depth)) {
+					++layerLength;
 				}
 			}
+			codes[i].reserve(layerLength);
+			readHuffmanOrGolomb(bitsIn, layerLength, codes[i]);
 		}
 	}
 

@@ -145,7 +145,7 @@ namespace huffman {
 				symbolIter + rangeLength,
 				std::back_inserter(symbolRange),
 				[&](auto& entry) { return static_cast<uint16_t>(entry.symbol) & mask; });
-			if (bitbuffer::eliasFanoSequenceCodeLength(rangeLength, mask) < rangeLength * symbolBitWidth) {
+			if (bitbuffer::eliasFanoSequenceCodeLength(rangeLength, mask) < static_cast<uint32_t>(rangeLength) * static_cast<uint32_t>(symbolBitWidth)) {
 				bitbuffer::writeEliasFanoSequenceCode(symbolRange, mask, buffer);
 			} else {
 				for (const uint16_t& sym : symbolRange) {
@@ -184,12 +184,12 @@ namespace huffman {
 		std::vector<uint16_t> symbolList;
 		symbolList.reserve(totalSymbols);
 		for (uint16_t rangeLength : lengthCounts) {
-			if (bitbuffer::eliasFanoSequenceCodeLength(rangeLength, mask) < rangeLength * symbolBitWidth) {
+			if (bitbuffer::eliasFanoSequenceCodeLength(rangeLength, mask) < static_cast<uint32_t>(rangeLength) * static_cast<uint32_t>(symbolBitWidth)) {
 				std::vector<uint16_t> symbolRange = bitbuffer::readEliasFanoSequenceCode(rangeLength, mask, buffer);
 				symbolList.insert(symbolList.end(), symbolRange.cbegin(), symbolRange.cend());
 			} else {
 				for (int i = 0; i < rangeLength; ++i) {
-					symbolList.push_back(buffer.ReadBits(symbolBitWidth));
+					symbolList.push_back(static_cast<uint16_t>(buffer.ReadBits(symbolBitWidth)));
 				}
 			}
 		}

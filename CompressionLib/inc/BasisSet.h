@@ -17,13 +17,24 @@ namespace basis {
 
 	double covariancePredictionModelV(double dx, double dy);
 
+	typedef struct Pt_Tag
+	{
+		int x, y;
+	} Pt;
+
+	typedef struct Line_Tag
+	{
+		Pt a;
+		Pt b;
+	} Line;
+
 	std::vector<math::Vector> createBasis(math::Matrix& covariance);
 
-	std::vector<std::vector<double> > distinctLineShapes(size_t blockSize);
+	std::vector<Line> distinctLineShapes(size_t blockSize);
 
-	math::Matrix createSegmentDictionary(size_t blockSize, const std::vector<std::vector<double> >& basisSet);
+	math::Matrix createSegmentDictionary(size_t blockSize, const std::vector<Line>& basisSet);
 
-	math::Matrix createIntraSegmentDictionary(size_t blockSize, const std::vector<double>& segmentMask, CovarianceModel model);
+	math::Matrix createIntraSegmentDictionary(size_t blockSize, const Line& segmentMask, CovarianceModel model);
 }
 
 

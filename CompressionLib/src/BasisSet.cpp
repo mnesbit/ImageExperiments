@@ -1,6 +1,6 @@
 #include "../inc/BasisSet.h"
 #include "../../SimpleMatrix/inc/symmeigen.h"
-#include <set>
+#include <map>
 #include <algorithm>
 
 namespace basis {
@@ -22,6 +22,12 @@ namespace basis {
 
 	std::vector<math::Vector> createBasis(math::Matrix& covariance)
 	{
+		if (covariance.Rows() != covariance.Columns()) {
+			throw new std::range_error("Requires a square symmetric covariance matrix");
+		}
+		if (covariance.Rows() == 0ULL) {
+			return std::vector<math::Vector>();
+		}
 		math::SymmetricEigenDecomposition eigenDeco(covariance);
 		math::Matrix eigenVectors = eigenDeco.EigenVectors();
 		math::Vector eigenValues = eigenDeco.EigenValues();
@@ -39,130 +45,165 @@ namespace basis {
 		return basisSet;
 	}
 
-	typedef struct Pt_Tag
-	{
-		int x, y;
-	} Pt;
-
-	static double Dist(Pt& line1, Pt& line2, Pt& point) {
+	static double Dist(const Pt& line1, const Pt& line2, const Pt& point) {
 		return static_cast<double>((line2.x - line1.x) * (line1.y - point.y) - (line1.x - point.x) * (line2.y - line1.y)) / sqrt((line2.x - line1.x) * (line2.x - line1.x) + (line2.y - line1.y) * (line2.y - line1.y));
 	}
 
 	struct ShapeComparator {
-		bool operator()(std::vector<double> a, std::vector<double> b) const
+		bool operator()(std::vector<bool> a, std::vector<bool> b) const
 		{
 			for (int i = 0; i < a.size(); ++i) {
-				if (signbit(a[i]) != signbit(b[i])) {
-					return signbit(b[i]);
+				if (a[i] != b[i]) {
+					return a[i];
 				}
 			}
 			return false;
 		}
 	};
 
-	std::vector<std::vector<double> > distinctLineShapes(size_t blockSize) {
-		std::set<std::vector<double>, ShapeComparator> basisSet;
-		basisSet.insert(std::vector<double>(blockSize * blockSize, true)); //dc basis
-		for (int side1 = -static_cast<int>(blockSize); side1 < 2 * static_cast<int>(blockSize); ++side1)
-		{
+	std::vector<Line> distinctLineShapes(size_t blockSize) {
+		std::map<std::vector<bool>, Line, ShapeComparator> basisSet;
+		basisSet[std::vector<bool>(blockSize * blockSize, true)] = Line{
+			.a = Pt {
+				.x = -1, .y = 0
+			},
+			.b = Pt {
+				.x = -1, .y = static_cast<int>(blockSize)
+			}
+		}; //dc basis
+		for (int side1 = -static_cast<int>(blockSize); side1 < 2 * static_cast<int>(blockSize); ++side1) {
 			Pt s1 = { .x = side1, .y = -static_cast<int>(blockSize) };
-			for (int side2 = -static_cast<int>(blockSize); side2 < 2 * static_cast<int>(blockSize); ++side2)
-			{
+			for (int side2 = -static_cast<int>(blockSize); side2 < 2 * static_cast<int>(blockSize); ++side2) {
 				Pt s2a = { .x = -static_cast<int>(blockSize), .y = side2 };
 				Pt s2b = { .x = side2, .y = 2 * static_cast<int>(blockSize) };
 				Pt s2c = { .x = 2 * static_cast<int>(blockSize), .y = side2 };
-				std::vector<double> bits1(blockSize * blockSize);
-				std::vector<double> invbits1(blockSize * blockSize);
-				std::vector<double> bits2(blockSize * blockSize);
-				std::vector<double> invbits2(blockSize * blockSize);
-				std::vector<double> bits3(blockSize * blockSize);
-				std::vector<double> invbits3(blockSize * blockSize);
-				for (size_t x = 0; x < blockSize; ++x)
-				{
-					for (size_t y = 0; y < blockSize; ++y)
-					{
+				std::vector<bool> bits1(blockSize * blockSize);
+				std::vector<bool> invbits1(blockSize * blockSize);
+				std::vector<bool> bits2(blockSize * blockSize);
+				std::vector<bool> invbits2(blockSize * blockSize);
+				std::vector<bool> bits3(blockSize * blockSize);
+				std::vector<bool> invbits3(blockSize * blockSize);
+				for (size_t x = 0; x < blockSize; ++x) {
+					for (size_t y = 0; y < blockSize; ++y) {
 						Pt s3 = { .x = static_cast<int>(x), .y = static_cast<int>(y) };
-						bits1[x + y * blockSize] = tanh(2.0 * Dist(s1, s2a, s3));
-						invbits1[x + y * blockSize] = -bits1[x + y * blockSize];
-						bits2[x + y * blockSize] = tanh(2.0 * Dist(s1, s2b, s3));
-						invbits2[x + y * blockSize] = -bits2[x + y * blockSize];
-						bits3[x + y * blockSize] = tanh(2.0 * Dist(s1, s2c, s3));
-						invbits3[x + y * blockSize] = -bits3[x + y * blockSize];
+						bits1[x + y * blockSize] = (Dist(s1, s2a, s3) >= 0.0);
+						invbits1[x + y * blockSize] = !bits1[x + y * blockSize];
+						bits2[x + y * blockSize] = (Dist(s1, s2b, s3) >= 0.0);
+						invbits2[x + y * blockSize] = !bits2[x + y * blockSize];
+						bits3[x + y * blockSize] = (Dist(s1, s2c, s3) >= 0.0);
+						invbits3[x + y * blockSize] = !bits3[x + y * blockSize];
 					}
 				}
-				if (!(basisSet.contains(bits1) || basisSet.contains(invbits1)))
-				{
-					basisSet.insert(bits1);
+				if (!(basisSet.contains(bits1) || basisSet.contains(invbits1))) {
+					basisSet[bits1] = Line{ .a = s1, .b = s2a };
 				}
-				if (!(basisSet.contains(bits2) || basisSet.contains(invbits2)))
-				{
-					basisSet.insert(bits2);
+				if (!(basisSet.contains(bits2) || basisSet.contains(invbits2))) {
+					basisSet[bits2] = Line{ .a = s1, .b = s2b };
 				}
-				if (!(basisSet.contains(bits3) || basisSet.contains(invbits3)))
-				{
-					basisSet.insert(bits3);
+				if (!(basisSet.contains(bits3) || basisSet.contains(invbits3))) {
+					basisSet[bits3] = Line{ .a = s1, .b = s2c };
 				}
 			}
 		}
-		for (int side1 = -static_cast<int>(blockSize); side1 < 2 * static_cast<int>(blockSize); ++side1)
-		{
+		for (int side1 = -static_cast<int>(blockSize); side1 < 2 * static_cast<int>(blockSize); ++side1) {
 			Pt s1 = { .x = 2 * static_cast<int>(blockSize) , .y = side1 };
-			for (int side2 = -static_cast<int>(blockSize); side2 < 2 * static_cast<int>(blockSize); ++side2)
-			{
+			for (int side2 = -static_cast<int>(blockSize); side2 < 2 * static_cast<int>(blockSize); ++side2) {
 				Pt s2a = { .x = -static_cast<int>(blockSize), .y = side2 };
 				Pt s2b = { .x = side2, .y = 2 * static_cast<int>(blockSize) };
 				Pt s2c = { .x = -static_cast<int>(blockSize), .y = side1 };
-				std::vector<double> bits1(blockSize * blockSize);
-				std::vector<double> invbits1(blockSize * blockSize);
-				std::vector<double> bits2(blockSize * blockSize);
-				std::vector<double> invbits2(blockSize * blockSize);
-				std::vector<double> bits3(blockSize * blockSize);
-				std::vector<double> invbits3(blockSize * blockSize);
-				for (size_t x = 0; x < blockSize; x++)
-				{
-					for (size_t y = 0; y < blockSize; y++)
-					{
+				std::vector<bool> bits1(blockSize * blockSize);
+				std::vector<bool> invbits1(blockSize * blockSize);
+				std::vector<bool> bits2(blockSize * blockSize);
+				std::vector<bool> invbits2(blockSize * blockSize);
+				std::vector<bool> bits3(blockSize * blockSize);
+				std::vector<bool> invbits3(blockSize * blockSize);
+				for (size_t x = 0; x < blockSize; x++) {
+					for (size_t y = 0; y < blockSize; y++) {
 						Pt s3{ .x = static_cast<int>(x), .y = static_cast<int>(y) };
-						bits1[x + y * blockSize] = tanh(2.0 * Dist(s1, s2a, s3));
-						invbits1[x + y * blockSize] = -bits1[x + y * blockSize];
-						bits2[x + y * blockSize] = tanh(2.0 * Dist(s1, s2b, s3));
-						invbits2[x + y * blockSize] = -bits2[x + y * blockSize];
-						bits3[x + y * blockSize] = tanh(2.0 * Dist(s2b, s2c, s3));
-						invbits3[x + y * blockSize] = -bits3[x + y * blockSize];
+						bits1[x + y * blockSize] = (Dist(s1, s2a, s3) >= 0.0);
+						invbits1[x + y * blockSize] = !bits1[x + y * blockSize];
+						bits2[x + y * blockSize] = (Dist(s1, s2b, s3) >= 0.0);
+						invbits2[x + y * blockSize] = !bits2[x + y * blockSize];
+						bits3[x + y * blockSize] = (Dist(s2b, s2c, s3) >= 0.0);
+						invbits3[x + y * blockSize] = !bits3[x + y * blockSize];
 					}
 				}
-				if (!(basisSet.contains(bits1) || basisSet.contains(invbits1)))
-				{
-					basisSet.insert(bits1);
+				if (!(basisSet.contains(bits1) || basisSet.contains(invbits1))) {
+					basisSet[bits1] = Line{ .a = s1, .b = s2a };
 				}
-				if (!(basisSet.contains(bits2) || basisSet.contains(invbits2)))
-				{
-					basisSet.insert(bits2);
+				if (!(basisSet.contains(bits2) || basisSet.contains(invbits2))) {
+					basisSet[bits2] = Line{ .a = s1, .b = s2b };
 				}
-				if (!(basisSet.contains(bits3) || basisSet.contains(invbits3)))
-				{
-					basisSet.insert(bits3);
+				if (!(basisSet.contains(bits3) || basisSet.contains(invbits3))) {
+					basisSet[bits3] = Line{ .a = s2b, .b = s2c };
 				}
 			}
 		}
-		return std::vector(basisSet.cbegin(), basisSet.cend());
+		std::vector<Line> retval;
+		std::transform(basisSet.cbegin(), basisSet.cend(), std::back_inserter(retval), [](const auto& x) { return x.second; });
+		return retval;
 	}
 
-	math::Matrix createSegmentDictionary(size_t blockSize, const std::vector<std::vector<double> >& basisSet) {
+	math::Matrix createSegmentDictionary(size_t blockSize, const std::vector<Line>& basisSet) {
 		math::Matrix dictionary(basisSet.size(), blockSize * blockSize);
+		const double sigma = 1.0;
+		const int kernelWidth = static_cast<int>(1 + sigma * 6);
+		const int kernelHalfWidth = kernelWidth / 2;
+		math::Vector gaussian(kernelWidth * kernelWidth);
+		for (int dx = -kernelHalfWidth; dx <= +kernelHalfWidth; ++dx) {
+			for (int dy = -kernelHalfWidth; dy <= +kernelHalfWidth; ++dy) {
+				gaussian[(dx + kernelHalfWidth) + kernelWidth * (dy + kernelHalfWidth)] = exp(-static_cast<double>(dx * dx + dy * dy) / (2.0 * sigma * sigma));
+			}
+		}
 		size_t i = 0;
-		for (const std::vector<double>& bits : basisSet) {
-			double total = 0.0;
+		for (const Line separator : basisSet) {
 			bool allSet = true;
 			bool allClear = true;
-			for (size_t j = 0; j < blockSize * blockSize; ++j) {
-				if (bits[j] >= 0.0) {
-					allClear = false;
-				} else {
-					allSet = false;
+			math::Vector zoomIn(4 * blockSize * blockSize);
+			Line doubledLine = Line{
+				.a = Pt {
+					.x = separator.a.x * 2,
+					.y = separator.a.y * 2
+				},
+				.b = Pt {
+					.x = separator.b.x * 2,
+					.y = separator.b.y * 2
 				}
-				dictionary[i][j] = bits[j];
-				total += bits[j];
+			};
+			for (int x = 0; x < 2 * blockSize; ++x) {
+				for (int y = 0; y < 2 * blockSize; ++y) {
+					Pt a = Pt{
+						.x = x,
+						.y = y
+					};
+					bool bit = (Dist(doubledLine.a, doubledLine.b, a) >= 0.0);
+					double value = bit ? +1.0 : -1.0;
+					if (bit) {
+						allClear = false;
+					} else {
+						allSet = false;
+					}
+					zoomIn[x + (2 * blockSize * y)] = value;
+				}
+			}
+			double total = 0.0;
+			for (int x = 0; x < blockSize; ++x) {
+				for (int y = 0; y < blockSize; ++y) {
+					double weight = 0.0;
+					double tot = 0.0;
+					for (int dx = -kernelHalfWidth; dx <= kernelHalfWidth; ++dx) {
+						int u = std::clamp(2 * x + dx, 0, static_cast<int>(2 * blockSize) - 1);
+						for (int dy = -kernelHalfWidth; dy <= kernelHalfWidth; ++dy) {
+							int v = std::clamp(2 * y + dy, 0, static_cast<int>(2 * blockSize) - 1);
+							double coeff = gaussian[(dx + kernelHalfWidth) + kernelWidth * (dy + kernelHalfWidth)];
+							weight += coeff;
+							tot += coeff * zoomIn[u + 2 * blockSize * v];
+						}
+					}
+					double value = tot / weight;
+					total += value;
+					dictionary[i][x + blockSize * y] = value;
+				}
 			}
 			double mean = total / static_cast<double>(blockSize * blockSize);
 			double sumsq = 0.0;
@@ -170,8 +211,8 @@ namespace basis {
 				double value = dictionary[i][j];
 				if (!(allSet || allClear)) {
 					value -= mean;
+					dictionary[i][j] = value;
 				}
-				dictionary[i][j] = value;
 				sumsq += value * value;
 			}
 			double norm = sqrt(sumsq);
@@ -186,40 +227,106 @@ namespace basis {
 		return dictionary;
 	}
 
-	math::Matrix createIntraSegmentDictionary(size_t blockSize, const std::vector<double>& segmentMask, CovarianceModel model) {
-		int count1 = 0;
-		int count2 = 0;
-		math::Matrix part1(blockSize * blockSize, blockSize * blockSize);
-		math::Matrix part2(blockSize * blockSize, blockSize * blockSize);
-		for (size_t x = 0; x < blockSize * blockSize; ++x) {
-			int x1 = static_cast<int>(x % blockSize);
-			int y1 = static_cast<int>(x / blockSize);
-			if (segmentMask[x] >= 0.0) ++count1;
-			if (segmentMask[x] <= 0.0) ++count2;
-			for (size_t y = 0; y < blockSize * blockSize; ++y) {
-				int x2 = static_cast<int>(y % blockSize);
-				int y2 = static_cast<int>(y / blockSize);
-				double distx = static_cast<double>(x2 - x1);
-				double disty = static_cast<double>(y2 - y1);
-				part1[x][y] = std::max(0.0, 0.5 + segmentMask[x]) * std::max(0.0, 0.5 + segmentMask[y]) * model(distx, disty);
-				part2[x][y] = std::max(0.0, 0.5 - segmentMask[x]) * std::max(0.0, 0.5 - segmentMask[y]) * model(distx, disty);
+	math::Matrix createIntraSegmentDictionary(size_t blockSize, const Line& segmentMask, CovarianceModel model) {
+		std::vector<Pt> map1;
+		std::vector<Pt> map2;
+		for (int x = 0; x < blockSize; ++x) {
+			for (int y = 0; y < blockSize; ++y) {
+				Pt a = Pt{
+					.x = x,
+					.y = y
+				};
+				double dist = Dist(segmentMask.a, segmentMask.b, a);
+				if (dist >= 0.0) {
+					map1.push_back(a);
+				} else {
+					map2.push_back(a);
+				}
+			}
+		}
+		math::Matrix part1(map1.size(), map1.size());
+		for (size_t i = 0; i < map1.size(); ++i) {
+			const Pt& a = map1[i];
+			for (size_t j = 0; j < map1.size(); ++j) {
+				const Pt& b = map1[j];
+				double dx = static_cast<double>(a.x - b.x);
+				double dy = static_cast<double>(a.y - b.y);
+				part1[i][j] = model(dx, dy);
+			}
+		}
+		math::Matrix part2(map2.size(), map2.size());
+		for (size_t i = 0; i < map2.size(); ++i) {
+			const Pt& a = map2[i];
+			for (size_t j = 0; j < map2.size(); ++j) {
+				const Pt& b = map2[j];
+				double dx = static_cast<double>(a.x - b.x);
+				double dy = static_cast<double>(a.y - b.y);
+				part2[i][j] = model(dx, dy);
 			}
 		}
 
 		std::vector<math::Vector> basis1 = createBasis(part1);
 		std::vector<math::Vector> basis2 = createBasis(part2);
-		size_t part1Count = std::max(0, count1 - 2);
-		size_t part2Count = std::max(0, count2 - 2);
+		size_t part1Count = std::max(0, static_cast<int>(map1.size()) - 1);
+		size_t part2Count = std::max(0, static_cast<int>(map2.size()) - 1);
 
 		math::Matrix dictionary(part1Count + part2Count, blockSize * blockSize);
-		for (size_t i = 0; i < part1Count; ++i) {
-			for (size_t j = 0; j < blockSize * blockSize; ++j) {
-				dictionary[i][j] = basis1[i + 1][j];
+		math::Vector temp(blockSize * blockSize);
+		size_t offset = 0;
+		for (size_t i = 0; i < std::max(part1Count, part2Count); ++i) {
+			if (i < part1Count) {
+				memset(temp.Data(), 0, sizeof(double) * temp.Length());
+				double meanTotal = 0.0;
+				for (size_t j = 0; j < map1.size(); ++j) {
+					const Pt& a = map1[j];
+					double value = basis1[i + 1][j];
+					meanTotal += value;
+					temp[a.x + blockSize * a.y] = value;
+				}
+				meanTotal /= static_cast<double>(map1.size());
+				double sumSq = 0.0;
+				for (size_t j = 0; j < map1.size(); ++j) {
+					const Pt& a = map1[j];
+					double value = temp[a.x + blockSize * a.y];
+					value -= meanTotal;
+					sumSq += value * value;
+					temp[a.x + blockSize * a.y] = value;
+				}
+				sumSq = sqrt(sumSq);
+				for (size_t j = 0; j < blockSize * blockSize; ++j) {
+					double value = temp[j];
+					value /= sumSq;
+					dictionary[offset][j] = value;
+				}
+				++offset;
 			}
-		}
-		for (size_t i = 0; i < part2Count; ++i) {
-			for (size_t j = 0; j < blockSize * blockSize; ++j) {
-				dictionary[part1Count + i][j] = basis2[i + 1][j];
+			if (i < part2Count) {
+				double meanTotal = 0.0;
+				memset(temp.Data(), 0, sizeof(double) * temp.Length());
+				for (size_t j = 0; j < map2.size(); ++j) {
+					const Pt& a = map2[j];
+					double value = basis2[i + 1][j];
+					meanTotal += value;
+					temp[a.x + blockSize * a.y] = value;
+				}
+				meanTotal /= static_cast<double>(map2.size());
+				double sumSq = 0.0;
+				for (size_t j = 0; j < map2.size(); ++j) {
+					const Pt& a = map2[j];
+					double value = temp[a.x + blockSize * a.y];
+					value -= meanTotal;
+					sumSq += value * value;
+					temp[a.x + blockSize * a.y] = value;
+				}
+				sumSq = sqrt(sumSq);
+				for (size_t j = 0; j < blockSize * blockSize; ++j) {
+					double value = temp[j];
+					if (sumSq != 0.0) {
+						value /= sumSq;
+					}
+					dictionary[offset][j] = value;
+				}
+				++offset;
 			}
 		}
 		return dictionary;
