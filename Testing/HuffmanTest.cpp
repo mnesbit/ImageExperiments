@@ -123,3 +123,56 @@ TEST(HuffmanTests, CorruptStreamTest) {
 	buffer.SkipBits(1);
 	ASSERT_THROW(huffman::huffmanDecode(buffer, out), std::range_error*);
 }
+class RLETest :
+	public testing::TestWithParam<std::string> {
+public:
+	std::string runTest(std::string val) {
+		std::vector<uint16_t> testVec(val.cbegin(), val.cend());
+		std::vector<uint16_t> enc = huffman::runLengthEncode(testVec);
+		std::vector<uint16_t> dec = huffman::runLengthDecode(enc);
+		return std::string(dec.cbegin(), dec.cend());
+	}
+};
+
+TEST_P(RLETest, RunLengthTest) {
+	std::string val = GetParam();
+	std::string dec = runTest(val);
+	ASSERT_EQ(dec, val);
+};
+
+INSTANTIATE_TEST_CASE_P(RunLengthTest,
+	RLETest,
+	testing::Values(
+		"", "a", "aa""", "aaa", "aaaa", "aaaaa",
+		"b", "ab", "aab", "aaab", "aaaab", "aaaaab",
+		"bab", "baab", "baaab", "baaaab", "baaaaab",
+		"aabbcc", "aaaabbbbcccc", "abababa",
+		"\0", "\0\0", "\0\0\0", "\0\0\0\0", "\0\0\0\0\0"
+		));
+
+TEST(RunLengthTest, LongSequences) {
+	for (size_t len = 10; len < 50000; len += 997) {
+		std::vector<uint16_t> testVec(len);
+		std::vector<uint16_t> enc = huffman::runLengthEncode(testVec);
+		std::vector<uint16_t> dec = huffman::runLengthDecode(enc);
+		ASSERT_EQ(dec, testVec);
+	}
+	for (size_t len = 10; len < 50000; len += 997) {
+		std::vector<uint16_t> testVec(len);
+		testVec[0] = 1;
+		testVec[len - 1] = 1;
+		std::vector<uint16_t> enc = huffman::runLengthEncode(testVec);
+		std::vector<uint16_t> dec = huffman::runLengthDecode(enc);
+		ASSERT_EQ(dec, testVec);
+	}
+	for (size_t len = 100; len < 50000; len += 997) {
+		std::vector<uint16_t> testVec(len);
+		testVec[len / 2] = 1;
+		testVec[(len / 2) + 1] = 1;
+		testVec[(len / 2) + 2] = 1;
+		testVec[(len / 2) + 3] = 1;
+		std::vector<uint16_t> enc = huffman::runLengthEncode(testVec);
+		std::vector<uint16_t> dec = huffman::runLengthDecode(enc);
+		ASSERT_EQ(dec, testVec);
+	}
+}

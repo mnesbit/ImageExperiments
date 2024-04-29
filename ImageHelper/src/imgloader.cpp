@@ -219,7 +219,7 @@ image<double>* LoadImageGenericMono(const char* filename,imgFormat* format)
 	return output;
 }
 
-void SaveImageGeneric(const image<rgb>* img,const char* filename,imgFormat format)
+void SaveImageGeneric(const image<rgb>* img,const char* filename,imgFormat format, int jpegQuality)
 {
 	const WCHAR* mimetype=0;
 	switch(format)
@@ -279,7 +279,18 @@ void SaveImageGeneric(const image<rgb>* img,const char* filename,imgFormat forma
 	int nLen = MultiByteToWideChar(CP_ACP,0,filename,-1,NULL,NULL);
 	LPWSTR lpszW = new WCHAR[nLen];
 	MultiByteToWideChar(CP_ACP,0,filename,-1,lpszW,nLen);
-	Gdiplus::Status stat = bmp->Save(lpszW, &encoderClsid, NULL);
+	if (format == imgFormat::JPEG) {
+		Gdiplus::EncoderParameters params;
+		params.Count = 1;
+		params.Parameter[0].Guid = Gdiplus::EncoderQuality;
+		params.Parameter[0].Type = Gdiplus::EncoderParameterValueTypeLong;
+		params.Parameter[0].NumberOfValues = 1;
+		long quality = static_cast<long>(jpegQuality);
+		params.Parameter[0].Value = &quality;
+		Gdiplus::Status stat = bmp->Save(lpszW, &encoderClsid, &params); // note default JPEG quality is 75
+	} else {
+		Gdiplus::Status stat = bmp->Save(lpszW, &encoderClsid, NULL);
+	}
 	delete[] lpszW;
 	delete bmp;
 

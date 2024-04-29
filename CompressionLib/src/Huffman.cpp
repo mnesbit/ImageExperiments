@@ -241,4 +241,68 @@ namespace huffman {
 		}
 		throw new std::range_error("Invalid bitstream");
 	}
+
+
+	std::vector<uint16_t> runLengthEncode(const std::vector<uint16_t>& data) {
+		std::vector<uint16_t> retval;
+		if (data.empty()) {
+			return retval;
+		}
+		retval.reserve(data.size());
+		uint16_t prevVal = 0;
+		bool newRun = true;
+		uint16_t count = 0;
+		for (const uint16_t& val : data) {
+			if (val == prevVal && !newRun) {
+				++count;
+				if (count == 1) {
+					retval.push_back(val);
+				} else if (count >= 0x8000) {
+					retval.push_back(count - 1);
+					count = 0;
+					newRun = true;
+				}
+			} else {
+				newRun = false;
+				if (count > 0) {
+					retval.push_back(count - 1);
+					count = 0;
+				}
+				prevVal = val;
+				retval.push_back(val);
+			}
+		}
+		if (count > 0) {
+			retval.push_back(count - 1);
+		}
+		return retval;
+	}
+
+	std::vector<uint16_t> runLengthDecode(const std::vector<uint16_t>& data) {
+		std::vector<uint16_t> retval;
+		if (data.empty()) {
+			return retval;
+		}
+		retval.reserve(data.size());
+		uint16_t prevVal = 0;
+		bool pendingCount = false;
+		bool newRun = true;
+		for (const uint16_t& val : data) {
+			if (pendingCount) {
+				for (uint16_t i = 0; i < val; ++i) {
+					retval.push_back(prevVal);
+				}
+				pendingCount = false;
+				newRun = true;
+			} else {
+				retval.push_back(val);
+				if (val == prevVal && !newRun) {
+					pendingCount = true;
+				}
+				newRun = false;
+				prevVal = val;
+			}
+		}
+		return retval;
+	}
 }
