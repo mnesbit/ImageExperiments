@@ -287,7 +287,7 @@ namespace compressed {
 		const size_t height,
 		const double quantY[], const double quantU[], const double quantV[],
 		std::vector<uint16_t>& lengths,
-		const std::vector<std::vector<uint16_t> >& codes,
+		std::vector<std::vector<uint16_t> >& codes,
 		size_t& outputByteSize)
 	{
 		BitBuffer bitsOut;
@@ -305,7 +305,25 @@ namespace compressed {
 		for (size_t i = 0; i < K; ++i) {
 			bitsOut.WriteShort(static_cast<uint16_t>(quantV[i]));
 		}
-
+		// diff encode the DC components
+		int32_t prev = 0;
+		for (uint16_t& coeff : codes[1]) {
+			int32_t diff = static_cast<int32_t>(coeff) - prev;
+			prev = static_cast<int32_t>(coeff);
+			coeff = bitbuffer::zigzagEncode(diff);
+		}
+		prev = 0;
+		for (uint16_t& coeff : codes[2ULL * K + 1]) {
+			int32_t diff = static_cast<int32_t>(coeff) - prev;
+			prev = static_cast<int32_t>(coeff);
+			coeff = bitbuffer::zigzagEncode(diff);
+		}
+		prev = 0;
+		for (uint16_t& coeff : codes[4ULL * K + 1]) {
+			int32_t diff = static_cast<int32_t>(coeff) - prev;
+			prev = static_cast<int32_t>(coeff);
+			coeff = bitbuffer::zigzagEncode(diff);
+		}
 		writeHuffmanOrGolomb(lengths, bitsOut);
 		for (size_t i = 0; i < 2ULL * 3ULL * K; ++i) {
 			std::vector<uint16_t> compCodes = huffman::runLengthEncode(codes[i]);
@@ -432,6 +450,22 @@ namespace compressed {
 				codes[i].reserve(layerLength);
 				readHuffmanOrGolomb(bitsIn, layerLength, codes[i]);
 			}
+		}
+		// undo diff encoding of DC coeffs
+		int32_t acc = 0;
+		for (uint16_t& coeff : codes[1]) {
+			acc = bitbuffer::zigzagDecode(static_cast<uint32_t>(coeff)) + acc;
+			coeff = static_cast<uint16_t>(acc);
+		}
+		acc = 0;
+		for (uint16_t& coeff : codes[2ULL * K + 1]) {
+			acc = bitbuffer::zigzagDecode(static_cast<uint32_t>(coeff)) + acc;
+			coeff = static_cast<uint16_t>(acc);
+		}
+		acc = 0;
+		for (uint16_t& coeff : codes[4ULL * K + 1]) {
+			acc = bitbuffer::zigzagDecode(static_cast<uint32_t>(coeff)) + acc;
+			coeff = static_cast<uint16_t>(acc);
 		}
 		return context;
 	}

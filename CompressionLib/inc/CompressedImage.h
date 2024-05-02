@@ -25,8 +25,8 @@ namespace compressed {
 	};
 
 	struct CompressionContext {
-		size_t K;
-		size_t BlockSize;
+		size_t K { 32 };
+		size_t BlockSize{ 8 };
 		math::Matrix BaseDict;
 		ChannelContext Y;
 		ChannelContext U;
