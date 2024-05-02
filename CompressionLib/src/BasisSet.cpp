@@ -1,6 +1,7 @@
 #include "../inc/BasisSet.h"
 #include "../../SimpleMatrix/inc/symmeigen.h"
 #include <map>
+#include <numbers>
 #include <algorithm>
 
 namespace basis {
@@ -18,6 +19,52 @@ namespace basis {
 	// fully substituted version of optimised ellipticLaplaceModel for V channel
 	double covariancePredictionModelV(double dx, double dy) {
 		return 371.87199999999996 * exp(-0.00147084 * abs(dx) + -0.0015265799999999998 * abs(dy));
+	}
+
+	math::Matrix createDCTDictionary(int blockSize) {
+		math::Matrix dctDict(blockSize * blockSize, blockSize * blockSize);
+		for (int u0 = 0; u0 < blockSize; ++u0) {
+			for (int v0 = 0; v0 < blockSize; ++v0) {
+				int index = (u0 * blockSize) + v0;
+				for (int x = 0; x < blockSize; ++x) {
+					for (int y = 0; y < blockSize; ++y) {
+						double sum = cos(((2 * x + 1) / (2.0 * blockSize)) * u0 * std::numbers::pi) * cos(((2 * y + 1) / (2.0 * blockSize)) * v0 * std::numbers::pi);
+						if (u0 && v0) {
+							sum = sum * sqrt(4.0 / (blockSize * blockSize));
+						} else if (u0 || v0) {
+							sum = sum * sqrt(2.0 / (blockSize * blockSize));
+						} else {
+							sum = 0.5 * sum * sqrt(4.0 / (blockSize * blockSize));
+						}
+						dctDict[index][x + (blockSize * y)] = sum;
+					}
+				}
+			}
+		}
+		return dctDict;
+	}
+
+	math::Matrix createKLTDictionary(int blockSize, CovarianceModel model) {
+		math::Matrix covarianceMatrix(blockSize * blockSize, blockSize * blockSize);
+		for (int i = 0; i < blockSize * blockSize; ++i) {
+			int xpos1 = i / blockSize;
+			int ypos1 = i % blockSize;
+			for (int j = 0; j < blockSize * blockSize; ++j) {
+				int xpos2 = j / blockSize;
+				int ypos2 = j % blockSize;
+				covarianceMatrix[i][j] = model(xpos1 - xpos2, ypos1 - ypos2);
+			}
+		}
+		return createDictionary(covarianceMatrix);
+	}
+
+	math::Matrix createDictionary(math::Matrix& covariance) {
+		std::vector<math::Vector> basisVec = createBasis(covariance);
+		math::Matrix dictionary(basisVec.size(), covariance.Columns());
+		for (size_t i = 0; i < covariance.Columns(); ++i) {
+			memcpy(dictionary.Data() + (i * covariance.Columns()), basisVec[i].Data(), sizeof(double) * basisVec[i].Length());
+		}
+		return dictionary;
 	}
 
 	std::vector<math::Vector> createBasis(math::Matrix& covariance)
@@ -63,20 +110,32 @@ namespace basis {
 
 	std::vector<Line> distinctLineShapes(size_t blockSize) {
 		std::map<std::vector<bool>, Line, ShapeComparator> basisSet;
-		basisSet[std::vector<bool>(blockSize * blockSize, true)] = Line{
-			.a = Pt {
-				.x = -1, .y = 0
-			},
-			.b = Pt {
-				.x = -1, .y = static_cast<int>(blockSize)
+		// Add strict horizontal and vertical (plus implicit DC) as otherwise faintly sloped versions enter in general rotuine below
+		for (int side = -1; side < static_cast<int>(blockSize)+1; ++side) {
+			Line horiz = Line{ .a = Pt {.x = 0, .y = side }, .b = Pt {.x = static_cast<int>(blockSize), .y = side } };
+			Line vert = Line{ .a = Pt {.x = side, .y = 0 }, .b = Pt {.x = side, .y =static_cast<int>(blockSize) } };
+			std::vector<bool> horizBits(blockSize * blockSize);
+			std::vector<bool> vertBits(blockSize * blockSize);
+			for (size_t x = 0; x < blockSize; ++x) {
+				for (size_t y = 0; y < blockSize; ++y) {
+					Pt s = { .x = static_cast<int>(x), .y = static_cast<int>(y) };
+					horizBits[x + y * blockSize] = (Dist(horiz.a, horiz.b, s) >= 0.0);
+					vertBits[x + y * blockSize] = (Dist(vert.a, vert.b, s) >= 0.0);
+				}
 			}
-		}; //dc basis
+			if (!(basisSet.contains(horizBits))) {
+				basisSet[horizBits] = horiz;
+			}
+			if (!(basisSet.contains(vertBits))) {
+				basisSet[vertBits] = vert;
+			}
+		}
 		for (int side1 = -static_cast<int>(blockSize); side1 < 2 * static_cast<int>(blockSize); ++side1) {
 			Pt s1 = { .x = side1, .y = -static_cast<int>(blockSize) };
 			for (int side2 = -static_cast<int>(blockSize); side2 < 2 * static_cast<int>(blockSize); ++side2) {
 				Pt s2a = { .x = -static_cast<int>(blockSize), .y = side2 };
-				Pt s2b = { .x = side2, .y = 2 * static_cast<int>(blockSize) };
-				Pt s2c = { .x = 2 * static_cast<int>(blockSize), .y = side2 };
+				Pt s2b = { .x = side2, .y = static_cast<int>(blockSize) };
+				Pt s2c = { .x = static_cast<int>(blockSize), .y = side2 };
 				std::vector<bool> bits1(blockSize * blockSize);
 				std::vector<bool> invbits1(blockSize * blockSize);
 				std::vector<bool> bits2(blockSize * blockSize);
@@ -106,11 +165,11 @@ namespace basis {
 			}
 		}
 		for (int side1 = -static_cast<int>(blockSize); side1 < 2 * static_cast<int>(blockSize); ++side1) {
-			Pt s1 = { .x = 2 * static_cast<int>(blockSize) , .y = side1 };
+			Pt s1a = { .x = static_cast<int>(blockSize) , .y = side1 };
+			Pt s1b = { .x = -static_cast<int>(blockSize), .y = side1 };
 			for (int side2 = -static_cast<int>(blockSize); side2 < 2 * static_cast<int>(blockSize); ++side2) {
 				Pt s2a = { .x = -static_cast<int>(blockSize), .y = side2 };
-				Pt s2b = { .x = side2, .y = 2 * static_cast<int>(blockSize) };
-				Pt s2c = { .x = -static_cast<int>(blockSize), .y = side1 };
+				Pt s2b = { .x = side2, .y = static_cast<int>(blockSize) };
 				std::vector<bool> bits1(blockSize * blockSize);
 				std::vector<bool> invbits1(blockSize * blockSize);
 				std::vector<bool> bits2(blockSize * blockSize);
@@ -120,22 +179,22 @@ namespace basis {
 				for (size_t x = 0; x < blockSize; x++) {
 					for (size_t y = 0; y < blockSize; y++) {
 						Pt s3{ .x = static_cast<int>(x), .y = static_cast<int>(y) };
-						bits1[x + y * blockSize] = (Dist(s1, s2a, s3) >= 0.0);
+						bits1[x + y * blockSize] = (Dist(s1a, s2a, s3) >= 0.0);
 						invbits1[x + y * blockSize] = !bits1[x + y * blockSize];
-						bits2[x + y * blockSize] = (Dist(s1, s2b, s3) >= 0.0);
+						bits2[x + y * blockSize] = (Dist(s1a, s2b, s3) >= 0.0);
 						invbits2[x + y * blockSize] = !bits2[x + y * blockSize];
-						bits3[x + y * blockSize] = (Dist(s2b, s2c, s3) >= 0.0);
+						bits3[x + y * blockSize] = (Dist(s1a, s2b, s3) >= 0.0);
 						invbits3[x + y * blockSize] = !bits3[x + y * blockSize];
 					}
 				}
 				if (!(basisSet.contains(bits1) || basisSet.contains(invbits1))) {
-					basisSet[bits1] = Line{ .a = s1, .b = s2a };
+					basisSet[bits1] = Line{ .a = s1a, .b = s2a };
 				}
 				if (!(basisSet.contains(bits2) || basisSet.contains(invbits2))) {
-					basisSet[bits2] = Line{ .a = s1, .b = s2b };
+					basisSet[bits2] = Line{ .a = s1a, .b = s2b };
 				}
 				if (!(basisSet.contains(bits3) || basisSet.contains(invbits3))) {
-					basisSet[bits3] = Line{ .a = s2b, .b = s2c };
+					basisSet[bits3] = Line{ .a = s1a, .b = s2b };
 				}
 			}
 		}

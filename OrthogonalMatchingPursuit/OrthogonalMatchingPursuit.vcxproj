@@ -136,6 +136,9 @@
     <ClCompile Include="OrthogonalMatchingPursuit.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\CompressionLib\CompressionLib.vcxproj">
+      <Project>{dbf95f98-5c9d-4474-8410-b16ebd31f3f9}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\ImageHelper\ImageHelper.vcxproj">
       <Project>{91174b1c-4d2e-48e7-9894-5382d8d4dc71}</Project>
     </ProjectReference>

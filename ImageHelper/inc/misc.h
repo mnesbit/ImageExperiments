@@ -4,10 +4,6 @@
 #include <cmath>
 #include "image.h"
 
-#ifndef M_PI
-#define M_PI 3.141592653589793
-#endif
-
 #define	RED_WEIGHT		0.299
 #define GREEN_WEIGHT	0.587
 #define BLUE_WEIGHT		0.114

@@ -7,7 +7,7 @@
 #include "../ImageHelper/inc/imgloader.h"
 #include "../SimpleMatrix/inc/covariance.h"
 #include "../SimpleMatrix/inc/symmeigen.h"
-#include "../ImageHelper/inc/misc.h"
+#include "../CompressionLib/inc/BasisSet.h"
 
 using namespace img;
 
@@ -208,247 +208,6 @@ math::Vector FromCoeffsDynamic(int K, const BasisChoice coeffs[], DynamicDiction
 	return results;
 }
 
-math::Matrix createDCTDictionary(int blockSize) {
-	math::Matrix dctDict(blockSize * blockSize, blockSize * blockSize);
-	for (int u0 = 0; u0 < blockSize; ++u0)
-	{
-		for (int v0 = 0; v0 < blockSize; ++v0)
-		{
-			int index = (u0 * blockSize) + v0;
-			for (int x = 0; x < blockSize; ++x)
-			{
-				for (int y = 0; y < blockSize; ++y)
-				{
-					double sum = cos(((2 * x + 1) / (2.0 * blockSize)) * u0 * M_PI) * cos(((2 * y + 1) / (2.0 * blockSize)) * v0 * M_PI);
-					if (u0 && v0)
-					{
-						sum = sum * sqrt(4.0 / (blockSize * blockSize));
-					}
-					else if (u0 || v0)
-					{
-						sum = sum * sqrt(2.0 / (blockSize * blockSize));
-					}
-					else
-					{
-						sum = 0.5 * sum * sqrt(4.0 / (blockSize * blockSize));
-					}
-					dctDict[index][x + (blockSize * y)] = sum;
-				}
-			}
-		}
-	}
-	return dctDict;
-}
-
-// fully substituted version of optimised summedLaplaceModel from FitCovarianceModel experiments
-double covariancePredictionModel(double dx, double dy) {
-	return 3817.7299999999996 * exp(-1.48854e-05 * dx * dx + -1.7273e-05 * dy * dy)
-		+ 657.8100000000001 * exp(-0.0436057 * abs(dx) + -0.050844400000000005 * abs(dy));
-}
-
-std::vector<math::Vector> createBasis(math::Matrix& part)
-{
-	math::SymmetricEigenDecomposition eigenDeco(part);
-	math::Matrix eigenVectors = eigenDeco.EigenVectors();
-	math::Vector eigenValues = eigenDeco.EigenValues();
-	std::vector<std::pair<double, int> > sortedIndex;
-	sortedIndex.reserve(eigenValues.Length());
-	for (int i = 0; i < eigenValues.Length(); ++i) {
-		sortedIndex.push_back(std::make_pair(abs(eigenValues[i]), i));
-	}
-	std::sort(sortedIndex.begin(), sortedIndex.end(), std::greater<std::pair<double, int> >());
-	std::vector<math::Vector> basisSet;
-	for (int i = 0; i < eigenValues.Length(); ++i) {
-		math::Vector col = eigenVectors.GetColumn(sortedIndex[i].second);
-		basisSet.push_back(col);
-	}
-	return basisSet;
-}
-
-math::Matrix createKLTDictionary(int blockSize) {
-	math::Matrix covarianceMatrix(blockSize * blockSize, blockSize * blockSize);
-	for (int i = 0; i < blockSize * blockSize; ++i)
-	{
-		int xpos1 = i / blockSize;
-		int ypos1 = i % blockSize;
-		for (int j = 0; j < blockSize * blockSize; ++j)
-		{
-			int xpos2 = j / blockSize;
-			int ypos2 = j % blockSize;
-			covarianceMatrix[i][j] = covariancePredictionModel(xpos1 - xpos2, ypos1-ypos2);
-		}
-	}
-	std::vector<math::Vector> sortedBasis = createBasis(covarianceMatrix);
-	math::Matrix dictionary(sortedBasis.size(), blockSize * blockSize);
-	for (int i = 0; i < sortedBasis.size(); ++i)
-	{
-		if (i == 0) { // ensure we have a flat DC basis
-			for (int j = 0; j < blockSize * blockSize; ++j)
-			{
-				dictionary[i][j] = 1.0 / blockSize;
-			}
-		} else {
-			for (int j = 0; j < blockSize * blockSize; ++j)
-			{
-				dictionary[i][j] = sortedBasis[i][j];
-			}
-		}
-	}
-	return dictionary;
-}
-
-typedef struct Pt_Tag
-{
-	int x, y;
-} Pt;
-
-static double Dist(Pt& line1, Pt& line2, Pt& point) {
-	return static_cast<double>((line2.x - line1.x) * (line1.y - point.y) - (line1.x - point.x) * (line2.y - line1.y)) / sqrt((line2.x - line1.x) * (line2.x - line1.x) + (line2.y - line1.y) * (line2.y - line1.y));
-}
-
-struct CustomComparator {
-	bool operator()(std::vector<double> a, std::vector<double> b) const
-	{
-		for (int i = 0; i < a.size(); ++i) {
-			if (signbit(a[i]) != signbit(b[i])) {
-				return signbit(a[i]);
-			}
-		}
-		return false;
-	}
-};
-
-std::vector<std::vector<double> > distinctLineShapes(int blockSize) {
-	std::set<std::vector<double>, CustomComparator> basisSet;
-	basisSet.insert(std::vector<double>(blockSize * blockSize, true)); //dc basis
-	for (int side1 = -1; side1 < blockSize + 1; ++side1)
-	{
-		Pt s1 = { .x = side1, .y = 0 };
-		for (int side2 = -1; side2 < blockSize + 1; ++side2)
-		{
-			Pt s2a = { .x = 0, .y = static_cast<int>(side2) };
-			Pt s2b = { .x = static_cast<int>(side2), .y = blockSize - 1 };
-			Pt s2c = { .x = blockSize - 1, .y = static_cast<int>(side2) };
-			std::vector<double> bits1(blockSize * blockSize);
-			std::vector<double> invbits1(blockSize * blockSize);
-			std::vector<double> bits2(blockSize * blockSize);
-			std::vector<double> invbits2(blockSize * blockSize);
-			std::vector<double> bits3(blockSize * blockSize);
-			std::vector<double> invbits3(blockSize * blockSize);
-			for (size_t x = 0; x < blockSize; ++x)
-			{
-				for (size_t y = 0; y < blockSize; ++y)
-				{
-					Pt s3 = { .x = static_cast<int>(x), .y = static_cast<int>(y) };
-					bits1[x + y * blockSize] = tanh(2.0 * Dist(s1, s2a, s3));
-					invbits1[x + y * blockSize] = -bits1[x + y * blockSize];
-					bits2[x + y * blockSize] = tanh(2.0 * Dist(s1, s2b, s3));
-					invbits2[x + y * blockSize] = -bits2[x + y * blockSize];
-					bits3[x + y * blockSize] = tanh(2.0 * Dist(s1, s2c, s3));
-					invbits3[x + y * blockSize] = -bits3[x + y * blockSize];
-				}
-			}
-			if (!(basisSet.contains(bits1) || basisSet.contains(invbits1)))
-			{
-				basisSet.insert(bits1);
-			}
-			if (!(basisSet.contains(bits2) || basisSet.contains(invbits2)))
-			{
-				basisSet.insert(bits2);
-			}
-			if (!(basisSet.contains(bits3) || basisSet.contains(invbits3)))
-			{
-				basisSet.insert(bits3);
-			}
-		}
-	}
-	for (int side1 = -1; side1 < blockSize + 1; ++side1)
-	{
-		Pt s1 = { .x = blockSize - 1 , .y = side1 };
-		for (int side2 = -1; side2 < blockSize + 1; ++side2)
-		{
-			Pt s2a = { .x = 0, .y = static_cast<int>(side2) };
-			Pt s2b = { .x = static_cast<int>(side2), .y = blockSize - 1 };
-			Pt s2c = { .x = 0, .y = side1 };
-			std::vector<double> bits1(blockSize * blockSize);
-			std::vector<double> invbits1(blockSize * blockSize);
-			std::vector<double> bits2(blockSize * blockSize);
-			std::vector<double> invbits2(blockSize * blockSize);
-			std::vector<double> bits3(blockSize * blockSize);
-			std::vector<double> invbits3(blockSize * blockSize);
-			for (size_t x = 0; x < blockSize; x++)
-			{
-				for (size_t y = 0; y < blockSize; y++)
-				{
-					Pt s3{ .x = static_cast<int>(x), .y = static_cast<int>(y) };
-					bits1[x + y * blockSize] = tanh(2.0 * Dist(s1, s2a, s3));
-					invbits1[x + y * blockSize] = -bits1[x + y * blockSize];
-					bits2[x + y * blockSize] = tanh(2.0 * Dist(s1, s2b, s3));
-					invbits2[x + y * blockSize] = -bits2[x + y * blockSize];
-					bits3[x + y * blockSize] = tanh(2.0 * Dist(s2b, s2c, s3));
-					invbits3[x + y * blockSize] = -bits3[x + y * blockSize];
-				}
-			}
-			if (!(basisSet.contains(bits1) || basisSet.contains(invbits1)))
-			{
-				basisSet.insert(bits1);
-			}
-			if (!(basisSet.contains(bits2) || basisSet.contains(invbits2)))
-			{
-				basisSet.insert(bits2);
-			}
-			if (!(basisSet.contains(bits3) || basisSet.contains(invbits3)))
-			{
-				basisSet.insert(bits3);
-			}
-		}
-	}
-	return std::vector(basisSet.cbegin(), basisSet.cend());
-}
-
-math::Matrix createSegmentDictionary(int blockSize, std::vector<std::vector<double> > basisSet) {
-	math::Matrix dictionary(basisSet.size(), blockSize * blockSize);
-	int i = 0;
-	for (const std::vector<double>& bits: basisSet) {
-		double total = 0.0;
-		bool allSet = true;
-		bool allClear = true;
-		for (size_t j = 0; j < blockSize * blockSize; ++j) {
-			if (bits[j] >= 0.0) {
-				allClear = false;
-			} else {
-				allSet = false;
-			}
-			dictionary[i][j] = bits[j];
-			total += bits[j];
-		}
-		double mean = total / static_cast<double>(blockSize * blockSize);
-		double sumsq = 0.0;
-		for (int j = 0; j < blockSize * blockSize; ++j) {
-			double value = dictionary[i][j];
-			if (!(allSet || allClear)) {
-				value -= mean;
-			}
-			dictionary[i][j] = value;
-			sumsq += value * value;
-		}
-		double norm = sqrt(sumsq);
-		for (int j = 0; j < blockSize * blockSize; ++j) {
-			double value = dictionary[i][j];
-			if (sumsq != 0.0) {
-				dictionary[i][j] = value / norm;
-			}
-		}
-		++i;
-	}
-	return dictionary;
-}
-
-math::Matrix createSegmentDictionary(int blockSize) {
-	std::vector<std::vector<double> > basisSet = distinctLineShapes(blockSize);
-	return createSegmentDictionary(blockSize, basisSet);
-}
-
 void writeDictionaryToPNG(math::Matrix dictionary, std::string fileName) {
 	size_t blockSize = static_cast<size_t>(sqrt(dictionary.Columns()));
 	if (dictionary.Columns() != blockSize * blockSize) {
@@ -505,83 +264,52 @@ int main(int argc, char* argv[])
 	}
 	std::cout << "Calculating basis vectors" << std::endl;
 	math::Matrix baseDict;
-	math::Matrix* detailBasis = nullptr;
+	std::vector<math::Matrix> detailBasis;
 	switch (mode) {
 		case Mode::DCT:
-			baseDict = createDCTDictionary(BlockSize);
+			baseDict = basis::createDCTDictionary(BlockSize);
 			if (argc == 7) {
 				std::string basisFileName(argv[6]);
 				writeDictionaryToPNG(baseDict, basisFileName);
 			}
 			break;
 		case Mode::KLT:
-			baseDict = createKLTDictionary(BlockSize);
+			baseDict = basis::createKLTDictionary(BlockSize,basis::covariancePredictionModelY);
 			if (argc == 7) {
 				std::string basisFileName(argv[6]);
 				writeDictionaryToPNG(baseDict, basisFileName);
 			}
 			break;
 		case Mode::SEG:
-			baseDict = createSegmentDictionary(BlockSize);
+		{
+			std::vector<basis::Line> shapes = basis::distinctLineShapes(BlockSize);
+			baseDict = basis::createSegmentDictionary(BlockSize, shapes);
 			if (argc == 7) {
 				std::string basisFileName(argv[6]);
 				writeDictionaryToPNG(baseDict, basisFileName);
 			}
+		}
 			break;
 		case Mode::SEG_KLT: {
-			std::vector<std::vector<double> > basisSet = distinctLineShapes(BlockSize);
-			baseDict = createSegmentDictionary(BlockSize, basisSet);
+			std::vector<basis::Line> shapes = basis::distinctLineShapes(BlockSize);
+			baseDict = basis::createSegmentDictionary(BlockSize, shapes);
 			size_t fullRowCount = baseDict.Rows();
-			detailBasis = new math::Matrix[baseDict.Rows()];
-			size_t id = 0;
-			for (const std::vector<double>& basis : basisSet) {
-				int count1 = 0;
-				int count2 = 0;
-				math::Matrix part1(BlockSize * BlockSize, BlockSize * BlockSize);
-				math::Matrix part2(BlockSize * BlockSize, BlockSize * BlockSize);
-				for (int x = 0; x < BlockSize * BlockSize; ++x) {
-					int x1 = x % BlockSize;
-					int y1 = x / BlockSize;
-					if (basis[x] >= 0.0) ++count1;
-					if (basis[x] <= 0.0) ++count2;
-					for (int y = 0; y < BlockSize * BlockSize; ++y) {
-						int x2 = y % BlockSize;
-						int y2 = y / BlockSize;
-						part1[x][y] = std::max(0.0, 0.5 + basis[x]) * std::max(0.0, 0.5 + basis[y]) * covariancePredictionModel(x2 - x1, y2 - y1);
-						part2[x][y] = std::max(0.0, 0.5 - basis[x]) * std::max(0.0, 0.5 - basis[y]) * covariancePredictionModel(x2 - x1, y2 - y1);
-					}
-				}
-
-				std::vector<math::Vector> basis1 = createBasis(part1);
-				std::vector<math::Vector> basis2 = createBasis(part2);
-				int part1Count = std::max(0, count1 - 2);
-				int part2Count = std::max(0, count2 - 2);
-
-				detailBasis[id] = math::Matrix(part1Count + part2Count, BlockSize * BlockSize);
-				for (int i = 0; i < part1Count; ++i) {
-					for (int j = 0; j < BlockSize * BlockSize; ++j) {
-						detailBasis[id][i][j] = basis1[i + 1][j];
-					}
-				}
-				for (int i = 0; i < part2Count; ++i) {
-					for (int j = 0; j < BlockSize * BlockSize; ++j) {
-						detailBasis[id][part1Count + i][j] = basis2[i + 1][j];
-					}
-				}
-				fullRowCount += detailBasis[id].Rows();
-				++id;
+			for (const basis::Line& shape: shapes) {
+				math::Matrix detail = basis::createIntraSegmentDictionary(BlockSize, shape, basis::covariancePredictionModelY);
+				fullRowCount += detail.Rows();
+				detailBasis.push_back(std::move(detail));
 			}
 			if (argc == 7) {
 				std::string basisFileName(argv[6]);
 				math::Matrix fullBasis(fullRowCount, BlockSize * BlockSize);
-				int offset = 0;
-				for (int i = 0; i < baseDict.Rows(); ++i) {
-					for (int j = 0; j < BlockSize * BlockSize; ++j) {
+				size_t offset = 0;
+				for (size_t i = 0; i < baseDict.Rows(); ++i) {
+					for (size_t j = 0; j < BlockSize * BlockSize; ++j) {
 						fullBasis[offset][j] = baseDict[i][j];
 					}
 					++offset;
 				}
-				for (int subDict = 0; subDict < id; ++subDict) {
+				for (size_t subDict = 0; subDict < shapes.size(); ++subDict) {
 					for (int i = 0; i < detailBasis[subDict].Rows(); ++i) {
 						for (int j = 0; j < BlockSize * BlockSize; ++j) {
 							fullBasis[offset][j] = detailBasis[subDict][i][j];
@@ -698,7 +426,6 @@ int main(int argc, char* argv[])
 	delete imgOut;
 	delete[] squaredError;
 	delete[] summedMagnitude;
-	delete[] detailBasis;
     return 0;
 }
 

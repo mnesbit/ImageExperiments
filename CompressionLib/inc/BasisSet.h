@@ -28,7 +28,13 @@ namespace basis {
 		Pt b;
 	} Line;
 
+	math::Matrix createDCTDictionary(int blockSize);
+
+	math::Matrix createKLTDictionary(int blockSize, CovarianceModel model);
+
 	std::vector<math::Vector> createBasis(math::Matrix& covariance);
+
+	math::Matrix createDictionary(math::Matrix& covariance);
 
 	std::vector<Line> distinctLineShapes(size_t blockSize);
 
