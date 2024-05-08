@@ -123,6 +123,7 @@ namespace compressed {
 
 	void createQuantizationTables(
 		const size_t K,
+		const size_t blockSize,
 		const double bppAllocation,
 		math::Vector& quantY, math::Vector& quantU, math::Vector& quantV
 	) {
@@ -134,12 +135,21 @@ namespace compressed {
 			variances[i + K] = s_varU[i];
 			variances[i + 2ULL * K] = s_varV[i];
 		}
-		while ((allocated / (8.0 * 8.0)) < bppAllocation) {
+		while ((allocated / static_cast<double>(blockSize * blockSize)) < bppAllocation) {
 			auto maxElement = std::max_element(variances.cbegin(), variances.cend());
 			ptrdiff_t index = maxElement - variances.cbegin();
 			alloc[index] += 1.0;
 			variances[index] /= 2.0;
 			allocated += 1.0;
+			double min = 1.0;
+			if (index == 0
+				|| index == K
+				|| index == 2 * K) {
+				min = static_cast<double>(blockSize);
+			}
+			if (255.0 * static_cast<double>(blockSize) * std::pow(0.5, alloc[index]) < min) {
+				variances[index] = 0.0; // exclude from further selection once we hit the floor
+			}
 		}
 		quantY = math::Vector(K);
 		quantU = math::Vector(K);
@@ -147,11 +157,55 @@ namespace compressed {
 		for (size_t i = 0; i < K; ++i) {
 			double min = 1.0;
 			if (i == 0) {
-				min = 8.0;
+				min = static_cast<double>(blockSize);
 			}
-			quantY[i] = std::max(std::ceil(255.0 * 8.0 * std::pow(Y_DECAY, static_cast<double>(i)) * std::pow(0.5, alloc[i])), min);
-			quantU[i] = std::max(std::ceil(255.0 * 8.0 * std::pow(U_DECAY, static_cast<double>(i)) * std::pow(0.5, alloc[i + K])), min);
-			quantV[i] = std::max(std::ceil(255.0 * 8.0 * std::pow(V_DECAY, static_cast<double>(i)) * std::pow(0.5, alloc[i + 2ULL * K])), min);
+			quantY[i] = std::max(std::ceil(255.0 * static_cast<double>(blockSize) * std::pow(Y_DECAY, static_cast<double>(i)) * std::pow(0.5, alloc[i])), min);
+			quantU[i] = std::max(std::ceil(255.0 * static_cast<double>(blockSize) * std::pow(U_DECAY, static_cast<double>(i)) * std::pow(0.5, alloc[i + K])), min);
+			quantV[i] = std::max(std::ceil(255.0 * static_cast<double>(blockSize) * std::pow(V_DECAY, static_cast<double>(i)) * std::pow(0.5, alloc[i + 2ULL * K])), min);
+		}
+	}
+
+	void createQuantizationTables(
+		const size_t K,
+		const size_t blockSize,
+		const double bppAllocation,
+		Eigen::VectorXf& quantY, Eigen::VectorXf& quantU, Eigen::VectorXf& quantV
+	) {
+		float allocated = 0.0;
+		std::vector<float> alloc(3ULL * K);
+		std::vector<float> variances(3ULL * K);
+		for (size_t i = 0; i < K; ++i) {
+			variances[i] = static_cast<float>(s_varY[i]);
+			variances[i + K] = static_cast<float>(s_varU[i]);
+			variances[i + 2ULL * K] = static_cast<float>(s_varV[i]);
+		}
+		while ((allocated / static_cast<double>(blockSize * blockSize)) < bppAllocation) {
+			auto maxElement = std::max_element(variances.cbegin(), variances.cend());
+			ptrdiff_t index = maxElement - variances.cbegin();
+			alloc[index] += 1.0f;
+			variances[index] /= 2.0f;
+			allocated += 1.0f;
+			float min = 1.0f;
+			if (index == 0
+				||index == K
+				|| index == 2 * K) {
+				min = static_cast<float>(blockSize);
+			}
+			if (255.0f * static_cast<float>(blockSize) * std::pow(0.5f, alloc[index]) < min) {
+				variances[index] = 0.0f; // exclude from further selection once we hit the floor
+			}
+		}
+		quantY.resize(K);
+		quantU.resize(K);
+		quantV.resize(K);
+		for (size_t i = 0; i < K; ++i) {
+			float min = 1.0f;
+			if (i == 0) {
+				min = static_cast<float>(blockSize);
+			}
+			quantY[i] = std::max(std::ceil(255.0f * static_cast<float>(blockSize) * std::pow(static_cast<float>(Y_DECAY), static_cast<float>(i)) * std::pow(0.5f, alloc[i])), min);
+			quantU[i] = std::max(std::ceil(255.0f * static_cast<float>(blockSize) * std::pow(static_cast<float>(U_DECAY), static_cast<float>(i)) * std::pow(0.5f, alloc[i + K])), min);
+			quantV[i] = std::max(std::ceil(255.0f * static_cast<float>(blockSize) * std::pow(static_cast<float>(V_DECAY), static_cast<float>(i)) * std::pow(0.5f, alloc[i + 2ULL * K])), min);
 		}
 	}
 
@@ -160,46 +214,85 @@ namespace compressed {
 		const std::vector<math::Matrix>& detailBasis,
 		int prevCoeffs,
 		const std::vector<BasisChoice>& prevChoices
-	)  {
-			size_t atomCount = baseDict.Rows();
-			int choice = 0;
-			for (int i = 0; i < prevCoeffs; ++i) {
-				if (i > 0) {
-					choice = choice + zigzagDecode(static_cast<int>(prevChoices[i].deltaId));
-				} else {
-					choice = static_cast<int>(prevChoices[0].deltaId);
-				}
-				if (choice >= 0
-					&& choice < baseDict.Rows()) {
-					atomCount += detailBasis[choice].Rows();
-				}
+	) {
+		size_t atomCount = baseDict.Rows();
+		int choice = 0;
+		for (int i = 0; i < prevCoeffs; ++i) {
+			if (i > 0) {
+				choice = choice + zigzagDecode(static_cast<int>(prevChoices[i].deltaId));
+			} else {
+				choice = static_cast<int>(prevChoices[0].deltaId);
 			}
-			math::Matrix dictionary(atomCount, baseDict.Columns());
-			double* pDict = dictionary.Data();
-			memcpy(pDict, baseDict.Data(), sizeof(double) * baseDict.Rows() * baseDict.Columns());
-			size_t offset = baseDict.Rows();
-			choice = 0;
-			for (int i = 0; i < prevCoeffs; ++i) {
-				if (i > 0) {
-					choice = choice + zigzagDecode(static_cast<int>(prevChoices[i].deltaId));
-				} else {
-					choice = static_cast<int>(prevChoices[0].deltaId);
-				}
-				if (choice >= 0
-					&& choice < baseDict.Rows()) {
-					const math::Matrix& detail = detailBasis[choice];
-					memcpy(pDict + (offset * dictionary.Columns()), detail.Data(), sizeof(double) * detail.Rows() * detail.Columns());
-					offset += static_cast<int>(detail.Rows());
-				}
+			if (choice >= 0
+				&& choice < baseDict.Rows()) {
+				atomCount += detailBasis[choice].Rows();
 			}
-			return dictionary;
-		};
+		}
+		math::Matrix dictionary(atomCount, baseDict.Columns());
+		double* pDict = dictionary.Data();
+		memcpy(pDict, baseDict.Data(), sizeof(double) * baseDict.Rows() * baseDict.Columns());
+		size_t offset = baseDict.Rows();
+		choice = 0;
+		for (int i = 0; i < prevCoeffs; ++i) {
+			if (i > 0) {
+				choice = choice + zigzagDecode(static_cast<int>(prevChoices[i].deltaId));
+			} else {
+				choice = static_cast<int>(prevChoices[0].deltaId);
+			}
+			if (choice >= 0
+				&& choice < baseDict.Rows()) {
+				const math::Matrix& detail = detailBasis[choice];
+				memcpy(pDict + (offset * dictionary.Columns()), detail.Data(), sizeof(double) * detail.Rows() * detail.Columns());
+				offset += static_cast<int>(detail.Rows());
+			}
+		}
+		return dictionary;
+	};
+
+	static Eigen::MatrixXf dynamicBasisFast(
+		const Eigen::MatrixXf& baseDict,
+		const std::vector<Eigen::MatrixXf>& detailBasis,
+		int prevCoeffs,
+		const std::vector<BasisChoice>& prevChoices
+	) {
+		size_t atomCount = baseDict.rows();
+		int choice = 0;
+		for (int i = 0; i < prevCoeffs; ++i) {
+			if (i > 0) {
+				choice = choice + zigzagDecode(static_cast<int>(prevChoices[i].deltaId));
+			} else {
+				choice = static_cast<int>(prevChoices[0].deltaId);
+			}
+			if (choice >= 0
+				&& choice < baseDict.rows()) {
+				atomCount += detailBasis[choice].rows();
+			}
+		}
+		Eigen::MatrixXf dictionary(atomCount, baseDict.cols());
+		dictionary.block(0, 0, baseDict.rows(), baseDict.cols()) = baseDict;
+		size_t offset = baseDict.rows();
+		choice = 0;
+		for (int i = 0; i < prevCoeffs; ++i) {
+			if (i > 0) {
+				choice = choice + zigzagDecode(static_cast<int>(prevChoices[i].deltaId));
+			} else {
+				choice = static_cast<int>(prevChoices[0].deltaId);
+			}
+			if (choice >= 0
+				&& choice < baseDict.rows()) {
+				const Eigen::MatrixXf& detail = detailBasis[choice];
+				dictionary.block(offset, 0, detail.rows(), detail.cols()) = detail;
+				offset += static_cast<int>(detail.rows());
+			}
+		}
+		return dictionary;
+	};
 
 	std::unique_ptr<CompressionContext> createCompressionContext(size_t K, size_t blockSize, double bppAllocation) {
 		std::unique_ptr<CompressionContext> context = std::unique_ptr<CompressionContext>(new CompressionContext);
 		context->K = K;
 		context->BlockSize = blockSize;
-		createQuantizationTables(K, bppAllocation, context->Y.Quant, context->U.Quant, context->V.Quant);
+		createQuantizationTables(K, blockSize, bppAllocation, context->Y.Quant, context->U.Quant, context->V.Quant);
 		std::vector<Line> basisSet = distinctLineShapes(blockSize);
 		context->BaseDict = createSegmentDictionary(blockSize, basisSet);
 		size_t fullRowCount = context->BaseDict.Rows();
@@ -208,14 +301,41 @@ namespace compressed {
 			context->U.DetailBasis.push_back(createIntraSegmentDictionary(blockSize, basis, covariancePredictionModelU));
 			context->V.DetailBasis.push_back(createIntraSegmentDictionary(blockSize, basis, covariancePredictionModelV));
 		}
-		context->Y.Dynamic = [&context](int prevCoeffs, const std::vector<BasisChoice>& prevChoices)  -> math::Matrix {
-			return dynamicBasis(context->BaseDict, context->Y.DetailBasis, prevCoeffs, prevChoices);
+		CompressionContext* ptr = context.get();
+		context->Y.Dynamic = [=](int prevCoeffs, const std::vector<BasisChoice>& prevChoices)  -> math::Matrix {
+			return dynamicBasis(ptr->BaseDict, ptr->Y.DetailBasis, prevCoeffs, prevChoices);
 			};
-		context->U.Dynamic = [&context](int prevCoeffs, const std::vector<BasisChoice>& prevChoices)  -> math::Matrix {
-			return dynamicBasis(context->BaseDict, context->U.DetailBasis, prevCoeffs, prevChoices);
+		context->U.Dynamic = [=](int prevCoeffs, const std::vector<BasisChoice>& prevChoices)  -> math::Matrix {
+			return dynamicBasis(ptr->BaseDict, ptr->U.DetailBasis, prevCoeffs, prevChoices);
 			};
-		context->V.Dynamic = [&context](int prevCoeffs, const std::vector<BasisChoice>& prevChoices)  -> math::Matrix {
-			return dynamicBasis(context->BaseDict, context->V.DetailBasis, prevCoeffs, prevChoices);
+		context->V.Dynamic = [=](int prevCoeffs, const std::vector<BasisChoice>& prevChoices)  -> math::Matrix {
+			return dynamicBasis(ptr->BaseDict, ptr->V.DetailBasis, prevCoeffs, prevChoices);
+			};
+		return context;
+	}
+
+	std::unique_ptr<CompressionContextFast> createCompressionContextFast(size_t K, size_t blockSize, double bppAllocation) {
+		std::unique_ptr<CompressionContextFast> context = std::unique_ptr<CompressionContextFast>(new CompressionContextFast);
+		context->K = K;
+		context->BlockSize = blockSize;
+		createQuantizationTables(K, blockSize, bppAllocation, context->Y.Quant, context->U.Quant, context->V.Quant);
+		std::vector<Line> basisSet = distinctLineShapes(blockSize);
+		context->BaseDict = createSegmentDictionaryFast(blockSize, basisSet);
+		size_t fullRowCount = context->BaseDict.rows();
+		for (const Line& basis : basisSet) {
+			context->Y.DetailBasis.push_back(createIntraSegmentDictionaryFast(blockSize, basis, covariancePredictionModelY));
+			context->U.DetailBasis.push_back(createIntraSegmentDictionaryFast(blockSize, basis, covariancePredictionModelU));
+			context->V.DetailBasis.push_back(createIntraSegmentDictionaryFast(blockSize, basis, covariancePredictionModelV));
+		}
+		CompressionContextFast* ptr = context.get();
+		context->Y.Dynamic = [=](int prevCoeffs, const std::vector<BasisChoice>& prevChoices)->Eigen::MatrixXf {
+			return dynamicBasisFast(ptr->BaseDict, ptr->Y.DetailBasis, prevCoeffs, prevChoices);
+			};
+		context->U.Dynamic = [=](int prevCoeffs, const std::vector<BasisChoice>& prevChoices)  -> Eigen::MatrixXf {
+			return dynamicBasisFast(ptr->BaseDict, ptr->U.DetailBasis, prevCoeffs, prevChoices);
+			};
+		context->V.Dynamic = [=](int prevCoeffs, const std::vector<BasisChoice>& prevChoices)  -> Eigen::MatrixXf {
+			return dynamicBasisFast(ptr->BaseDict, ptr->V.DetailBasis, prevCoeffs, prevChoices);
 			};
 		return context;
 	}
@@ -280,7 +400,7 @@ namespace compressed {
 		}
 	}
 
-	std::unique_ptr<uint8_t[]> writeCompressed(
+	static std::unique_ptr<uint8_t[]> writeCompressed(
 		const size_t K,
 		const size_t blockSize,
 		const size_t width,
@@ -339,9 +459,68 @@ namespace compressed {
 		return bitsOut.Save(outputByteSize);
 	}
 
-	std::unique_ptr<uint8_t[]> encodeImage(const image<rgb>* imgIn, const size_t K, const size_t blockSize, 
+	static std::unique_ptr<uint8_t[]> writeCompressed(
+		const size_t K,
+		const size_t blockSize,
+		const size_t width,
+		const size_t height,
+		const Eigen::VectorXf& quantY, const Eigen::VectorXf& quantU, const Eigen::VectorXf& quantV,
+		std::vector<uint16_t>& lengths,
+		std::vector<std::vector<uint16_t> >& codes,
+		size_t& outputByteSize)
+	{
+		BitBuffer bitsOut;
+		bitsOut.WriteInt(MAGIC);
+		bitsOut.WriteInt(static_cast<uint32_t>(width));
+		bitsOut.WriteInt(static_cast<uint32_t>(height));
+		bitsOut.WriteByte(static_cast<uint8_t>(K));
+		bitsOut.WriteByte(static_cast<uint8_t>(blockSize));
+		for (size_t i = 0; i < K; ++i) {
+			bitsOut.WriteShort(static_cast<uint16_t>(quantY[i]));
+		}
+		for (size_t i = 0; i < K; ++i) {
+			bitsOut.WriteShort(static_cast<uint16_t>(quantU[i]));
+		}
+		for (size_t i = 0; i < K; ++i) {
+			bitsOut.WriteShort(static_cast<uint16_t>(quantV[i]));
+		}
+		// diff encode the DC components
+		int32_t prev = 0;
+		for (uint16_t& coeff : codes[1]) {
+			int32_t diff = static_cast<int32_t>(coeff) - prev;
+			prev = static_cast<int32_t>(coeff);
+			coeff = bitbuffer::zigzagEncode(diff);
+		}
+		prev = 0;
+		for (uint16_t& coeff : codes[2ULL * K + 1]) {
+			int32_t diff = static_cast<int32_t>(coeff) - prev;
+			prev = static_cast<int32_t>(coeff);
+			coeff = bitbuffer::zigzagEncode(diff);
+		}
+		prev = 0;
+		for (uint16_t& coeff : codes[4ULL * K + 1]) {
+			int32_t diff = static_cast<int32_t>(coeff) - prev;
+			prev = static_cast<int32_t>(coeff);
+			coeff = bitbuffer::zigzagEncode(diff);
+		}
+		writeHuffmanOrGolomb(lengths, bitsOut);
+		for (size_t i = 0; i < 2ULL * 3ULL * K; ++i) {
+			std::vector<uint16_t> compCodes = huffman::runLengthEncode(codes[i]);
+			if (compCodes.size() + 4 < codes[i].size()) {
+				bitsOut.WriteBits(1, 1);
+				bitsOut.WriteInt(static_cast<uint32_t>(compCodes.size()));
+				writeHuffmanOrGolomb(compCodes, bitsOut);
+			} else {
+				bitsOut.WriteBits(0, 1);
+				writeHuffmanOrGolomb(codes[i], bitsOut);
+			}
+		}
+		return bitsOut.Save(outputByteSize);
+	}
+
+	std::unique_ptr<uint8_t[]> encodeImage(const image<rgb>* imgIn, const size_t K, const size_t blockSize,
 		const double quantY[], const double quantU[], const double quantV[],
-		DynamicDictionaryFunction dynamicY, DynamicDictionaryFunction dynamicU, DynamicDictionaryFunction dynamicV,
+		const DynamicDictionaryFunction& dynamicY, const DynamicDictionaryFunction& dynamicU, const DynamicDictionaryFunction& dynamicV,
 		size_t& outputByteSize) {
 		const size_t width = imgIn->width();
 		const size_t height = imgIn->height();
@@ -396,6 +575,63 @@ namespace compressed {
 		return writeCompressed(K, blockSize, width, height, quantY, quantU, quantV, lengths, codes, outputByteSize);
 	}
 
+	std::unique_ptr<uint8_t[]> encodeImageFast(const image<rgb>* imgIn, const size_t K, const size_t blockSize,
+		const Eigen::VectorXf& quantY, const Eigen::VectorXf& quantU, const Eigen::VectorXf& quantV,
+		const DynamicDictionaryFunctionFast& dynamicY, const DynamicDictionaryFunctionFast& dynamicU, const DynamicDictionaryFunctionFast& dynamicV,
+		size_t& outputByteSize) {
+		const size_t width = imgIn->width();
+		const size_t height = imgIn->height();
+		std::vector<BasisChoice> choicesY(K);
+		std::vector<BasisChoice> choicesU(K);
+		std::vector<BasisChoice> choicesV(K);
+		Eigen::VectorXf blockY(blockSize * blockSize);
+		Eigen::VectorXf blockU(blockSize * blockSize);
+		Eigen::VectorXf blockV(blockSize * blockSize);
+		std::vector<uint16_t> lengths;
+		std::vector<std::vector<uint16_t> > codes(2 * 3 * K);
+		for (size_t x = 0; x < width; x += blockSize) {
+			std::cout << std::format("encode {} %", (100 * x) / width) << std::endl;
+			for (size_t y = 0; y < height; y += blockSize) {
+				for (size_t dx = 0; dx < blockSize; ++dx) {
+					size_t u = x + dx;
+					for (size_t dy = 0; dy < blockSize; ++dy) {
+						size_t v = y + dy;
+						if ((u < width) && (v < height)) {
+							rgb pt = imRef(imgIn, u, v);
+							yuv col = YUVFromRGB(pt);
+							blockY[dx + (blockSize * dy)] = static_cast<float>(col.y);
+							blockU[dx + (blockSize * dy)] = static_cast<float>(col.u);
+							blockV[dx + (blockSize * dy)] = static_cast<float>(col.v);
+						} else {
+							blockY[dx + (blockSize * dy)] = 0.0f;
+							blockU[dx + (blockSize * dy)] = 0.0f;
+							blockV[dx + (blockSize * dy)] = 0.0f;
+						}
+					}
+				}
+				int countY = CalcMPDynamicFast(static_cast<int>(K), quantY, choicesY, blockY, dynamicY);
+				lengths.push_back(countY);
+				for (int i = 0; i < countY; ++i) {
+					codes[2ULL * i].push_back(choicesY[i].deltaId);
+					codes[2ULL * i + 1ULL].push_back(choicesY[i].intCoeff);
+				}
+				int countU = CalcMPDynamicFast(static_cast<int>(K), quantU, choicesU, blockU, dynamicU);
+				lengths.push_back(countU);
+				for (int i = 0; i < countU; ++i) {
+					codes[2ULL * K + 2ULL * i].push_back(choicesU[i].deltaId);
+					codes[2ULL * K + 2ULL * i + 1ULL].push_back(choicesU[i].intCoeff);
+				}
+				int countV = CalcMPDynamicFast(static_cast<int>(K), quantV, choicesV, blockV, dynamicV);
+				lengths.push_back(countV);
+				for (int i = 0; i < countV; ++i) {
+					codes[4ULL * K + 2ULL * i].push_back(choicesV[i].deltaId);
+					codes[4ULL * K + 2ULL * i + 1ULL].push_back(choicesV[i].intCoeff);
+				}
+			}
+		}
+		return writeCompressed(K, blockSize, width, height, quantY, quantU, quantV, lengths, codes, outputByteSize);
+	}
+
 	std::unique_ptr<CompressionContext> readCompressed(
 		const uint8_t bytes[],
 		size_t byteSize,
@@ -427,7 +663,81 @@ namespace compressed {
 		}
 		codes.clear();
 		codes.resize(2ULL * 3ULL * K);
-		size_t patchLength = 3ULL * ((width + 7ULL) / 8ULL) * ((height + 7ULL) / 8ULL);
+		size_t patchLength = 3ULL * ((width + blockSize - 1ULL) / blockSize) * ((height + blockSize - 1ULL) / blockSize);
+		lengths.reserve(patchLength);
+		readHuffmanOrGolomb(bitsIn, patchLength, lengths);
+		for (size_t i = 0; i < 2ULL * 3ULL * K; ++i) {
+			if (bitsIn.ReadBits(1) == 1ULL) {
+				size_t codeLength = static_cast<size_t>(bitsIn.ReadInt());
+				std::vector<uint16_t> compCodes;
+				compCodes.reserve(codeLength);
+				readHuffmanOrGolomb(bitsIn, codeLength, compCodes);
+				std::vector<uint16_t> decomp = huffman::runLengthDecode(compCodes);
+				codes[i].swap(decomp);
+			} else {
+				size_t layer = (i / 2ULL) / K;
+				size_t depth = (i / 2ULL) % K;
+				size_t layerLength = 0ULL;
+				for (size_t offset = 0; offset < (lengths.size() / 3ULL); ++offset) {
+					if (lengths[(3ULL * offset) + layer] > static_cast<uint16_t>(depth)) {
+						++layerLength;
+					}
+				}
+				codes[i].reserve(layerLength);
+				readHuffmanOrGolomb(bitsIn, layerLength, codes[i]);
+			}
+		}
+		// undo diff encoding of DC coeffs
+		int32_t acc = 0;
+		for (uint16_t& coeff : codes[1]) {
+			acc = bitbuffer::zigzagDecode(static_cast<uint32_t>(coeff)) + acc;
+			coeff = static_cast<uint16_t>(acc);
+		}
+		acc = 0;
+		for (uint16_t& coeff : codes[2ULL * K + 1]) {
+			acc = bitbuffer::zigzagDecode(static_cast<uint32_t>(coeff)) + acc;
+			coeff = static_cast<uint16_t>(acc);
+		}
+		acc = 0;
+		for (uint16_t& coeff : codes[4ULL * K + 1]) {
+			acc = bitbuffer::zigzagDecode(static_cast<uint32_t>(coeff)) + acc;
+			coeff = static_cast<uint16_t>(acc);
+		}
+		return context;
+	}
+
+	std::unique_ptr<CompressionContextFast> readCompressedFast(
+		const uint8_t bytes[],
+		size_t byteSize,
+		size_t& K,
+		size_t& blockSize,
+		size_t& width,
+		size_t& height,
+		std::vector<uint16_t>& lengths,
+		std::vector<std::vector<uint16_t> >& codes
+	) {
+		BitBuffer bitsIn;
+		bitsIn.Load(bytes, 0ULL, 8ULL * byteSize);
+		if (bitsIn.ReadInt() != MAGIC) {
+			throw new std::range_error("Invalid input data");
+		}
+		width = static_cast<size_t>(bitsIn.ReadInt());
+		height = static_cast<size_t>(bitsIn.ReadInt());
+		K = static_cast<size_t>(bitsIn.ReadByte());
+		blockSize = static_cast<size_t>(bitsIn.ReadByte());
+		std::unique_ptr<CompressionContextFast> context = createCompressionContextFast(K, blockSize, 0.0);
+		for (size_t i = 0; i < K; ++i) {
+			context->Y.Quant[i] = static_cast<float>(bitsIn.ReadShort());
+		}
+		for (size_t i = 0; i < K; ++i) {
+			context->U.Quant[i] = static_cast<float>(bitsIn.ReadShort());
+		}
+		for (size_t i = 0; i < K; ++i) {
+			context->V.Quant[i] = static_cast<float>(bitsIn.ReadShort());
+		}
+		codes.clear();
+		codes.resize(2ULL * 3ULL * K);
+		size_t patchLength = 3ULL * ((width + blockSize - 1ULL) / blockSize) * ((height + blockSize - 1ULL) / blockSize);
 		lengths.reserve(patchLength);
 		readHuffmanOrGolomb(bitsIn, patchLength, lengths);
 		for (size_t i = 0; i < 2ULL * 3ULL * K; ++i) {
@@ -505,6 +815,60 @@ namespace compressed {
 					choicesV[i].intCoeff = codes[4ULL * K + 2ULL * i + 1ULL][offsets[2ULL * K + i]++];
 				}
 				math::Vector decodedV = FromCoeffsDynamic(countV, context->V.Quant.Data(), choicesV, context->V.Dynamic);
+				for (size_t dx = 0; dx < blockSize; ++dx) {
+					size_t u = x + dx;
+					for (size_t dy = 0; dy < blockSize; ++dy) {
+						size_t v = y + dy;
+						if ((u < width) && (v < height)) {
+							rgb pt = RGBFromYUV(yuv{
+								.y = decodedY[dx + (blockSize * dy)],
+								.u = decodedU[dx + (blockSize * dy)],
+								.v = decodedV[dx + (blockSize * dy)]
+								});
+							imRef(imgOut, u, v) = pt;
+						}
+					}
+				}
+			}
+		}
+		return imgOut;
+	}
+
+	image<rgb>* decodeImageFast(const uint8_t bytes[], size_t byteSize) {
+		size_t width;
+		size_t height;
+		size_t K;
+		size_t blockSize;
+		std::vector<uint16_t> lengths;
+		std::vector<std::vector<uint16_t> > codes;
+		std::unique_ptr<CompressionContextFast> context = readCompressedFast(bytes, byteSize, K, blockSize, width, height, lengths, codes);
+		image<rgb>* imgOut = new image<rgb>(width, height, false);
+		std::vector<size_t> offsets(3 * K);
+		size_t lengthOffset = 0;
+		std::vector<BasisChoice> choicesY(K);
+		std::vector<BasisChoice> choicesU(K);
+		std::vector<BasisChoice> choicesV(K);
+		for (size_t x = 0; x < width; x += blockSize) {
+			std::cout << std::format("decode {} %", (100 * x) / width) << std::endl;
+			for (size_t y = 0; y < height; y += blockSize) {
+				int countY = lengths[lengthOffset++];
+				for (int i = 0; i < countY; ++i) {
+					choicesY[i].deltaId = codes[2ULL * i][offsets[i]];
+					choicesY[i].intCoeff = codes[2ULL * i + 1ULL][offsets[i]++];
+				}
+				Eigen::VectorXf decodedY = FromCoeffsDynamicFast(countY, context->Y.Quant, choicesY, context->Y.Dynamic);
+				int countU = lengths[lengthOffset++];
+				for (int i = 0; i < countU; ++i) {
+					choicesU[i].deltaId = codes[2ULL * K + 2ULL * i][offsets[K + i]];
+					choicesU[i].intCoeff = codes[2ULL * K + 2ULL * i + 1ULL][offsets[K + i]++];
+				}
+				Eigen::VectorXf decodedU = FromCoeffsDynamicFast(countU, context->U.Quant, choicesU, context->U.Dynamic);
+				int countV = lengths[lengthOffset++];
+				for (int i = 0; i < countV; ++i) {
+					choicesV[i].deltaId = codes[4ULL * K + 2ULL * i][offsets[2ULL * K + i]];
+					choicesV[i].intCoeff = codes[4ULL * K + 2ULL * i + 1ULL][offsets[2ULL * K + i]++];
+				}
+				Eigen::VectorXf decodedV = FromCoeffsDynamicFast(countV, context->V.Quant, choicesV, context->V.Dynamic);
 				for (size_t dx = 0; dx < blockSize; ++dx) {
 					size_t u = x + dx;
 					for (size_t dy = 0; dy < blockSize; ++dy) {

@@ -83,6 +83,8 @@ static void printUsage() {
 	std::cout << "usage: Compression.exe -j <quality 1-100> <input compressed file path>" << std::endl;
 	std::cout << "Enumerate all .TIF/.JPG files in folder and gather statistics (to use as basis of future quantization calcs)" << std::endl;
 	std::cout << "usage: Compression.exe -s <seed> <patches per image> <input folder path> <outputs statistics file path>" << std::endl;
+	std::cout << "Enumerate all .TIF/.JPG files in folder and calclulate compression curves for them" << std::endl;
+	std::cout << "Compression.exe -g <input folder path> <outputs statistics file path>" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -97,16 +99,26 @@ int main(int argc, char* argv[]) {
 			return -1;
 		}
 		std::cout << "create basis function" << std::endl;
-		double bppAllocation = atof(argv[2]);
 		image<rgb>* imgIn = LoadImageGenericRGB(argv[3]);
-		std::unique_ptr<CompressionContext> context = createCompressionContext(K, BlockSize, bppAllocation);
+		std::unique_ptr<CompressionContextFast> context;
+		if (std::string(argv[2]) == "max") {
+			context = createCompressionContextFast(K, BlockSize, 0.0);
+			for (size_t i = 0; i < K; ++i) {
+				context->Y.Quant[i] = 1.0;
+				context->U.Quant[i] = 1.0;
+				context->V.Quant[i] = 1.0;
+			}
+		} else {
+			double bppAllocation = atof(argv[2]);
+			context = createCompressionContextFast(K, BlockSize, bppAllocation);
+		}
 		std::cout << std::format("start processing image {} using largest {} coefficients.", argv[3], K) << std::endl;
 		size_t outputBytesSize;
-		std::unique_ptr<uint8_t[]> encodedBytes = encodeImage(
+		std::unique_ptr<uint8_t[]> encodedBytes = encodeImageFast(
 			imgIn,
 			K,
 			BlockSize,
-			context->Y.Quant.Data(), context->U.Quant.Data(), context->V.Quant.Data(),
+			context->Y.Quant, context->U.Quant, context->V.Quant,
 			context->Y.Dynamic, context->U.Dynamic, context->V.Dynamic,
 			outputBytesSize);
 		delete imgIn;
@@ -125,7 +137,7 @@ int main(int argc, char* argv[]) {
 		uint8_t* buffer = new uint8_t[len];
 		fileIn.seekg(0, std::ios::beg);
 		fileIn.read(reinterpret_cast<char*>(buffer), len);
-		image<rgb>* imgOut = decodeImage(buffer, len);
+		image<rgb>* imgOut = decodeImageFast(buffer, len);
 		delete[] buffer;
 		img::SaveImageGeneric(imgOut, argv[3], imgFormat::PNG);
 		delete imgOut;
@@ -134,20 +146,33 @@ int main(int argc, char* argv[]) {
 			printUsage();
 			return -1;
 		}
+		const auto start = std::chrono::system_clock::now();
 		std::cout << "create basis function" << std::endl;
-		double bppAllocation = atof(argv[2]);
 		image<rgb>* imgIn = LoadImageGenericRGB(argv[3]);
-		std::unique_ptr<CompressionContext> context = createCompressionContext(K, BlockSize, bppAllocation);
+		std::unique_ptr<CompressionContextFast> context;
+		if (std::string(argv[2]) == "max") {
+			context = createCompressionContextFast(K, BlockSize, 0.0);
+			for (size_t i = 0; i < K; ++i) {
+				context->Y.Quant[i] = 1.0;
+				context->U.Quant[i] = 1.0;
+				context->V.Quant[i] = 1.0;
+			}
+		} else {
+			double bppAllocation = atof(argv[2]);
+			context = createCompressionContextFast(K, BlockSize, bppAllocation);
+		}
 		std::cout << std::format("start processing image {} using largest {} coefficients.", argv[3], K) << std::endl;
 		size_t outputBytesSize;
-		std::unique_ptr<uint8_t[]> encodedBytes = encodeImage(
+		std::unique_ptr<uint8_t[]> encodedBytes = encodeImageFast(
 			imgIn,
 			K,
 			BlockSize,
-			context->Y.Quant.Data(), context->U.Quant.Data(), context->V.Quant.Data(),
+			context->Y.Quant, context->U.Quant, context->V.Quant,
 			context->Y.Dynamic, context->U.Dynamic, context->V.Dynamic,
 			outputBytesSize);
-		image<rgb>* imgOut = decodeImage(encodedBytes.get(), outputBytesSize);
+		image<rgb>* imgOut = decodeImageFast(encodedBytes.get(), outputBytesSize);
+		const auto end = std::chrono::system_clock::now();
+		std::cout << duration_cast<std::chrono::milliseconds>(end - start) << std::endl;
 		double psnr = calculatePSNR(imgIn, imgOut);
 		std::cout << std::format("PSNR {} bpp {} total KB {}", psnr, static_cast<double>(8ULL * outputBytesSize) / static_cast<double>(imgOut->width() * imgOut->height()), outputBytesSize / 1024ULL) << std::endl;
 		delete imgIn;
@@ -185,12 +210,12 @@ int main(int argc, char* argv[]) {
 		std::mt19937 rand;
 		rand.seed(atoi(argv[2]));
 		const int patchesPerImage = atoi(argv[3]);
-		math::Stat coeffStatsY[K];
-		math::Stat selectStatsY[K];
-		math::Stat coeffStatsU[K];
-		math::Stat selectStatsU[K];
-		math::Stat coeffStatsV[K];
-		math::Stat selectStatsV[K];
+		math::Stat coeffStatsY[K]{};
+		math::Stat selectStatsY[K]{};
+		math::Stat coeffStatsU[K]{};
+		math::Stat selectStatsU[K]{};
+		math::Stat coeffStatsV[K]{};
+		math::Stat selectStatsV[K]{};
 		std::unique_ptr<CompressionContext> context = createCompressionContext(K, BlockSize, 0.0);
 		for (size_t i = 0; i < K; ++i) {
 			context->Y.Quant[i] = 1.0;
@@ -274,6 +299,57 @@ int main(int argc, char* argv[]) {
 		}
 		fileOut.close();
 		return -1;
+	} else if (mode == "-g") {
+		if (argc != 4) {
+			printUsage();
+		}
+		const auto files = readFiles(argv[2]);
+		std::ofstream fileOut;
+		fileOut.open(argv[3], std::ios::out | std::ios::trunc);
+		fileOut << "File, Mode, Quality, Size, BPP, PSNR" << std::endl;
+		for (size_t count = 0; count < files.size(); ++count) {
+			std::string file = files[count];
+			std::string lowerCaseName(file.size(), 0);
+			transform(file.cbegin(), file.cend(), lowerCaseName.begin(), ::tolower);
+			if (lowerCaseName.ends_with(".jpg") || lowerCaseName.ends_with(".tif")) {
+				std::cout << std::format("JPEG processing: {} {}%", file, (100L * count) / files.size()) << std::endl;
+				image<rgb>* imgIn = LoadImageGenericRGB(file.c_str());
+				for (int quality = 100; quality >= 10; quality -= 20) {
+					char tmpFileName[L_tmpnam_s];
+					tmpnam_s(tmpFileName, L_tmpnam_s);
+					img::SaveImageGeneric(imgIn, tmpFileName, imgFormat::JPEG, quality); //convert to JPEG
+					size_t jpegSize = std::filesystem::file_size(tmpFileName);
+					image<rgb>* imgConv = LoadImageGenericRGB(tmpFileName);
+					double psnr = calculatePSNR(imgIn, imgConv);
+					delete imgConv;
+					std::filesystem::remove(tmpFileName);
+					double bpp = static_cast<double>(8ULL * jpegSize) / static_cast<double>(imgIn->width() * imgIn->height());
+					std::cout << std::format("JPEG Quality {} PSNR {} bpp {} total KB {}", quality, psnr, bpp, jpegSize / 1024ULL) << std::endl;
+					fileOut << std::format("{}, {}, {}, {}, {}, {}", file, "JPEG", quality, jpegSize, bpp, psnr) << std::endl;
+				}
+				for (double bppAllocation = 8.0; bppAllocation >= 1.0; bppAllocation -= 1.0) {
+					std::unique_ptr<CompressionContextFast> context = createCompressionContextFast(K, BlockSize, bppAllocation);
+					std::cout << std::format("MP processing: {} {}%", file, (100L * count) / files.size()) << std::endl;
+					size_t outputBytesSize;
+					std::unique_ptr<uint8_t[]> encodedBytes = encodeImageFast(
+						imgIn,
+						K,
+						BlockSize,
+						context->Y.Quant, context->U.Quant, context->V.Quant,
+						context->Y.Dynamic, context->U.Dynamic, context->V.Dynamic,
+						outputBytesSize);
+					image<rgb>* imgOut = decodeImageFast(encodedBytes.get(), outputBytesSize);
+					double psnr = calculatePSNR(imgIn, imgOut);
+					delete imgOut;
+					double bpp = static_cast<double>(8ULL * outputBytesSize) / static_cast<double>(imgIn->width() * imgIn->height());
+					std::cout << std::format("MP Quality {} PSNR {} bpp {} total KB {}", bppAllocation, psnr, bpp, outputBytesSize) << std::endl;
+					fileOut << std::format("{}, {}, {}, {}, {}, {}", file, "MP", bppAllocation, outputBytesSize, bpp, psnr) << std::endl;
+				}
+				delete imgIn;
+			}
+			fileOut.flush();
+		}
+		fileOut.close();
 	} else {
 		printUsage();
 		return -1;

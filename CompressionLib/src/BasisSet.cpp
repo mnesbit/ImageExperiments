@@ -3,6 +3,8 @@
 #include <map>
 #include <numbers>
 #include <algorithm>
+#include <numbers>
+#include "../../eigen/Eigen/Eigenvalues"
 
 namespace basis {
 
@@ -44,6 +46,29 @@ namespace basis {
 		return dctDict;
 	}
 
+	Eigen::MatrixXf createDCTDictionaryFast(int blockSize) {
+		Eigen::MatrixXf dctDict(blockSize * blockSize, blockSize * blockSize);
+		for (int u0 = 0; u0 < blockSize; ++u0) {
+			for (int v0 = 0; v0 < blockSize; ++v0) {
+				int index = (u0 * blockSize) + v0;
+				for (int x = 0; x < blockSize; ++x) {
+					for (int y = 0; y < blockSize; ++y) {
+						double sum = cos(((2 * x + 1) / (2.0 * blockSize)) * u0 * std::numbers::pi) * cos(((2 * y + 1) / (2.0 * blockSize)) * v0 * std::numbers::pi);
+						if (u0 && v0) {
+							sum = sum * sqrt(4.0 / (blockSize * blockSize));
+						} else if (u0 || v0) {
+							sum = sum * sqrt(2.0 / (blockSize * blockSize));
+						} else {
+							sum = 0.5 * sum * sqrt(4.0 / (blockSize * blockSize));
+						}
+						dctDict(index, x + (blockSize * y)) = static_cast<float>(sum);
+					}
+				}
+			}
+		}
+		return dctDict;
+	}
+
 	math::Matrix createKLTDictionary(int blockSize, CovarianceModel model) {
 		math::Matrix covarianceMatrix(blockSize * blockSize, blockSize * blockSize);
 		for (int i = 0; i < blockSize * blockSize; ++i) {
@@ -58,7 +83,21 @@ namespace basis {
 		return createDictionary(covarianceMatrix);
 	}
 
-	math::Matrix createDictionary(math::Matrix& covariance) {
+	Eigen::MatrixXf createKLTDictionaryFast(int blockSize, CovarianceModel model) {
+		Eigen::MatrixXf covarianceMatrix(blockSize * blockSize, blockSize * blockSize);
+		for (int i = 0; i < blockSize * blockSize; ++i) {
+			int xpos1 = i / blockSize;
+			int ypos1 = i % blockSize;
+			for (int j = 0; j < blockSize * blockSize; ++j) {
+				int xpos2 = j / blockSize;
+				int ypos2 = j % blockSize;
+				covarianceMatrix(i,j) = static_cast<float>(model(xpos1 - xpos2, ypos1 - ypos2));
+			}
+		}
+		return createDictionaryFast(covarianceMatrix);
+	}
+
+	math::Matrix createDictionary(const math::Matrix& covariance) {
 		std::vector<math::Vector> basisVec = createBasis(covariance);
 		math::Matrix dictionary(basisVec.size(), covariance.Columns());
 		for (size_t i = 0; i < covariance.Columns(); ++i) {
@@ -67,7 +106,16 @@ namespace basis {
 		return dictionary;
 	}
 
-	std::vector<math::Vector> createBasis(math::Matrix& covariance)
+	Eigen::MatrixXf createDictionaryFast(const Eigen::MatrixXf& covariance) {
+		std::vector<Eigen::VectorXf> basisVec = createBasisFast(covariance);
+		Eigen::MatrixXf dictionary(basisVec.size(), covariance.cols());
+		for (int i = 0; i < covariance.rows(); ++i) {
+			dictionary.row(i) = basisVec[i];
+		}
+		return dictionary;
+	}
+
+	std::vector<math::Vector> createBasis(const math::Matrix& covariance)
 	{
 		if (covariance.Rows() != covariance.Columns()) {
 			throw new std::range_error("Requires a square symmetric covariance matrix");
@@ -87,7 +135,52 @@ namespace basis {
 		std::vector<math::Vector> basisSet;
 		for (int i = 0; i < eigenValues.Length(); ++i) {
 			math::Vector col = eigenVectors.GetColumn(sortedIndex[i].second);
+			// scan for first significant entry and sign flip eigenvector if less than zero to ensure consistency of representation
+			for (int j = 0; j < col.Length(); ++j) {
+				if (abs(col[j]) > 1E-10) {
+					if (col[j] < 0.0) {
+						for (int k = 0; k < col.Length(); ++k) {
+							col[k] = -col[k];
+						}
+					}
+					break;
+				}
+			}
 			basisSet.push_back(col);
+		}
+		return basisSet;
+	}
+
+	std::vector<Eigen::VectorXf> createBasisFast(const Eigen::MatrixXf& covariance)
+	{
+		if (covariance.rows() != covariance.cols()) {
+			throw new std::range_error("Requires a square symmetric covariance matrix");
+		}
+		if (covariance.rows() == 0ULL) {
+			return std::vector<Eigen::VectorXf>();
+		}
+		Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> eigenDeco(covariance.rows());
+		eigenDeco.compute(covariance);
+		std::vector<std::pair<double, int> > sortedIndex;
+		sortedIndex.reserve(covariance.rows());
+		for (int i = 0; i < covariance.rows(); ++i) {
+			sortedIndex.push_back(std::make_pair(abs(eigenDeco.eigenvalues()(i)), i));
+		}
+		std::sort(sortedIndex.begin(), sortedIndex.end(), std::greater<std::pair<double, int> >());
+		std::vector<Eigen::VectorXf> basisSet;
+		for (int i = 0; i < sortedIndex.size(); ++i) {
+			const Eigen::VectorXf& col = eigenDeco.eigenvectors().col(sortedIndex[i].second);
+			// scan for first significant entry and sign flip eigenvector if less than zero to ensure consistency of representation
+			for (int j = 0; j < col.size(); ++j) {
+				if (abs(col[j]) > 1E-10) {
+					if (col[j] < 0.0) {
+						basisSet.push_back(-1.0 * col);
+					} else {
+						basisSet.push_back(col);
+					}
+					break;
+				}
+			};
 		}
 		return basisSet;
 	}
@@ -130,7 +223,7 @@ namespace basis {
 				basisSet[vertBits] = vert;
 			}
 		}
-		for (int side1 = -static_cast<int>(blockSize); side1 < 2 * static_cast<int>(blockSize); ++side1) {
+		for (int side1 = -static_cast<int>(blockSize);  side1 < 2 * static_cast<int>(blockSize); ++side1) {
 			Pt s1 = { .x = side1, .y = -static_cast<int>(blockSize) };
 			for (int side2 = -static_cast<int>(blockSize); side2 < 2 * static_cast<int>(blockSize); ++side2) {
 				Pt s2a = { .x = -static_cast<int>(blockSize), .y = side2 };
@@ -286,6 +379,89 @@ namespace basis {
 		return dictionary;
 	}
 
+	Eigen::MatrixXf createSegmentDictionaryFast(size_t blockSize, const std::vector<Line>& basisSet) {
+		Eigen::MatrixXf dictionary(basisSet.size(), blockSize * blockSize);
+		const double sigma = 1.0;
+		const int kernelWidth = static_cast<int>(1 + sigma * 6);
+		const int kernelHalfWidth = kernelWidth / 2;
+		Eigen::MatrixXf gaussian(kernelWidth, kernelWidth);
+		for (int dx = -kernelHalfWidth; dx <= +kernelHalfWidth; ++dx) {
+			for (int dy = -kernelHalfWidth; dy <= +kernelHalfWidth; ++dy) {
+				gaussian(dx + kernelHalfWidth, dy + kernelHalfWidth) = static_cast<float>(exp(-static_cast<double>(dx * dx + dy * dy) / (2.0 * sigma * sigma)));
+			}
+		}
+		size_t i = 0;
+		for (const Line separator : basisSet) {
+			bool allSet = true;
+			bool allClear = true;
+			Eigen::VectorXf zoomIn(4 * blockSize * blockSize);
+			Line doubledLine = Line{
+				.a = Pt {
+					.x = separator.a.x * 2,
+					.y = separator.a.y * 2
+				},
+				.b = Pt {
+					.x = separator.b.x * 2,
+					.y = separator.b.y * 2
+				}
+			};
+			for (int x = 0; x < 2 * blockSize; ++x) {
+				for (int y = 0; y < 2 * blockSize; ++y) {
+					Pt a = Pt{
+						.x = x,
+						.y = y
+					};
+					bool bit = (Dist(doubledLine.a, doubledLine.b, a) >= 0.0);
+					float value = bit ? +1.0f : -1.0f;
+					if (bit) {
+						allClear = false;
+					} else {
+						allSet = false;
+					}
+					zoomIn[x + (2 * blockSize * y)] = value;
+				}
+			}
+			float total = 0.0;
+			for (int x = 0; x < blockSize; ++x) {
+				for (int y = 0; y < blockSize; ++y) {
+					float weight = 0.0;
+					float tot = 0.0;
+					for (int dx = -kernelHalfWidth; dx <= kernelHalfWidth; ++dx) {
+						int u = std::clamp(2 * x + dx, 0, static_cast<int>(2 * blockSize) - 1);
+						for (int dy = -kernelHalfWidth; dy <= kernelHalfWidth; ++dy) {
+							int v = std::clamp(2 * y + dy, 0, static_cast<int>(2 * blockSize) - 1);
+							float coeff = gaussian(dx + kernelHalfWidth, dy + kernelHalfWidth);
+							weight += coeff;
+							tot += coeff * zoomIn[u + 2 * blockSize * v];
+						}
+					}
+					float value = tot / weight;
+					total += value;
+					dictionary(i, x + blockSize * y) = value;
+				}
+			}
+			float mean = total / static_cast<float>(blockSize * blockSize);
+			float sumsq = 0.0;
+			for (size_t j = 0; j < blockSize * blockSize; ++j) {
+				float value = dictionary(i, j);
+				if (!(allSet || allClear)) {
+					value -= mean;
+					dictionary(i, j) = value;
+				}
+				sumsq += value * value;
+			}
+			float norm = sqrtf(sumsq);
+			for (size_t j = 0; j < blockSize * blockSize; ++j) {
+				float value = dictionary(i, j);
+				if (sumsq != 0.0) {
+					dictionary(i, j) = value / norm;
+				}
+			}
+			++i;
+		}
+		return dictionary;
+	}
+
 	math::Matrix createIntraSegmentDictionary(size_t blockSize, const Line& segmentMask, CovarianceModel model) {
 		std::vector<Pt> map1;
 		std::vector<Pt> map2;
@@ -384,6 +560,111 @@ namespace basis {
 						value /= sumSq;
 					}
 					dictionary[offset][j] = value;
+				}
+				++offset;
+			}
+		}
+		return dictionary;
+	}
+
+	Eigen::MatrixXf createIntraSegmentDictionaryFast(size_t blockSize, const Line& segmentMask, CovarianceModel model) {
+		std::vector<Pt> map1;
+		std::vector<Pt> map2;
+		for (int x = 0; x < blockSize; ++x) {
+			for (int y = 0; y < blockSize; ++y) {
+				Pt a = Pt{
+					.x = x,
+					.y = y
+				};
+				double dist = Dist(segmentMask.a, segmentMask.b, a);
+				if (dist >= 0.0) {
+					map1.push_back(a);
+				} else {
+					map2.push_back(a);
+				}
+			}
+		}
+		Eigen::MatrixXf part1(map1.size(), map1.size());
+		for (size_t i = 0; i < map1.size(); ++i) {
+			const Pt& a = map1[i];
+			for (size_t j = 0; j < map1.size(); ++j) {
+				const Pt& b = map1[j];
+				double dx = static_cast<double>(a.x - b.x);
+				double dy = static_cast<double>(a.y - b.y);
+				part1(i, j) = static_cast<float>(model(dx, dy));
+			}
+		}
+		Eigen::MatrixXf part2(map2.size(), map2.size());
+		for (size_t i = 0; i < map2.size(); ++i) {
+			const Pt& a = map2[i];
+			for (size_t j = 0; j < map2.size(); ++j) {
+				const Pt& b = map2[j];
+				double dx = static_cast<double>(a.x - b.x);
+				double dy = static_cast<double>(a.y - b.y);
+				part2(i, j) = static_cast<float>(model(dx, dy));
+			}
+		}
+
+		std::vector<Eigen::VectorXf> basis1 = createBasisFast(part1);
+		std::vector<Eigen::VectorXf> basis2 = createBasisFast(part2);
+		size_t part1Count = std::max(0, static_cast<int>(map1.size()) - 1);
+		size_t part2Count = std::max(0, static_cast<int>(map2.size()) - 1);
+
+		Eigen::MatrixXf dictionary(part1Count + part2Count, blockSize * blockSize);
+		Eigen::VectorXf temp(blockSize * blockSize);
+		size_t offset = 0;
+		for (size_t i = 0; i < std::max(part1Count, part2Count); ++i) {
+			if (i < part1Count) {
+				temp.setConstant(0.0);
+				float meanTotal = 0.0;
+				for (size_t j = 0; j < map1.size(); ++j) {
+					const Pt& a = map1[j];
+					float value = basis1[i + 1][j];
+					meanTotal += value;
+					temp[a.x + blockSize * a.y] = value;
+				}
+				meanTotal /= static_cast<float>(map1.size());
+				float sumSq = 0.0;
+				for (size_t j = 0; j < map1.size(); ++j) {
+					const Pt& a = map1[j];
+					float value = temp[a.x + blockSize * a.y];
+					value -= meanTotal;
+					sumSq += value * value;
+					temp[a.x + blockSize * a.y] = value;
+				}
+				sumSq = sqrt(sumSq);
+				for (size_t j = 0; j < blockSize * blockSize; ++j) {
+					float value = temp[j];
+					value /= sumSq;
+					dictionary(offset, j) = value;
+				}
+				++offset;
+			}
+			if (i < part2Count) {
+				float meanTotal = 0.0;
+				temp.setConstant(0.0);
+				for (size_t j = 0; j < map2.size(); ++j) {
+					const Pt& a = map2[j];
+					float value = basis2[i + 1](j);
+					meanTotal += value;
+					temp[a.x + blockSize * a.y] = value;
+				}
+				meanTotal /= static_cast<float>(map2.size());
+				float sumSq = 0.0;
+				for (size_t j = 0; j < map2.size(); ++j) {
+					const Pt& a = map2[j];
+					float value = temp[a.x + blockSize * a.y];
+					value -= meanTotal;
+					sumSq += value * value;
+					temp[a.x + blockSize * a.y] = value;
+				}
+				sumSq = sqrt(sumSq);
+				for (size_t j = 0; j < blockSize * blockSize; ++j) {
+					float value = temp[j];
+					if (sumSq != 0.0) {
+						value /= sumSq;
+					}
+					dictionary(offset, j) = value;
 				}
 				++offset;
 			}

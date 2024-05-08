@@ -14,6 +14,7 @@ namespace compressed {
 	// The DC component quantization is capped at 8.0 and other coefficients are capped at 1.0 divisor
 	void createQuantizationTables(
 		const size_t K,
+		const size_t blockSize,
 		const double bppAllocation,
 		math::Vector& quantY, math::Vector& quantU, math::Vector& quantV
 		);
@@ -25,7 +26,7 @@ namespace compressed {
 	};
 
 	struct CompressionContext {
-		size_t K { 32 };
+		size_t K{ 32 };
 		size_t BlockSize{ 8 };
 		math::Matrix BaseDict;
 		ChannelContext Y;
@@ -33,7 +34,25 @@ namespace compressed {
 		ChannelContext V;
 	};
 
+	struct ChannelContextFast {
+	public:
+		Eigen::VectorXf Quant;
+		std::vector<Eigen::MatrixXf> DetailBasis;
+		matching::DynamicDictionaryFunctionFast Dynamic;
+	};
+
+	struct CompressionContextFast {
+	public:
+		size_t K{ 32 };
+		size_t BlockSize{ 8 };
+		Eigen::MatrixXf BaseDict;
+		ChannelContextFast Y;
+		ChannelContextFast U;
+		ChannelContextFast V;
+	};
+
 	std::unique_ptr<CompressionContext> createCompressionContext(size_t K, size_t blockSize, double bppAllocation);
+	std::unique_ptr<CompressionContextFast> createCompressionContextFast(size_t K, size_t blockSize, double bppAllocation);
 
 	double calculatePSNR(const img::image<img::rgb>* original, const img::image<img::rgb>* decoded);
 
@@ -42,10 +61,19 @@ namespace compressed {
 		const size_t K,
 		const size_t blockSize,
 		const double quantY[], const double quantU[], const double quantV[],
-		matching::DynamicDictionaryFunction dynamicY, matching::DynamicDictionaryFunction dynamicU, matching::DynamicDictionaryFunction dynamicV,
+		const matching::DynamicDictionaryFunction& dynamicY, const matching::DynamicDictionaryFunction& dynamicU, const matching::DynamicDictionaryFunction& dynamicV,
+		size_t& outputByteSize);
+
+	std::unique_ptr<uint8_t[]> encodeImageFast(
+		const img::image<img::rgb>* imgIn,
+		const size_t K,
+		const size_t blockSize,
+		const Eigen::VectorXf& quantY, const Eigen::VectorXf& quantU, const Eigen::VectorXf& quantV,
+		const matching::DynamicDictionaryFunctionFast& dynamicY, const matching::DynamicDictionaryFunctionFast& dynamicU, const matching::DynamicDictionaryFunctionFast& dynamicV,
 		size_t& outputByteSize);
 
 	img::image<img::rgb>* decodeImage(const uint8_t bytes[], size_t byteSize);
+	img::image<img::rgb>* decodeImageFast(const uint8_t bytes[], size_t byteSize);
 }
 
 #endif //_COMPRESSED_IMAGE_H_
