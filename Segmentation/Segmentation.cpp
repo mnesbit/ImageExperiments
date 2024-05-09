@@ -15,13 +15,12 @@ int main(int argc, char* argv[])
     cluster::Clusters cluster(imgIn);
     cluster.Process(abs(rounds));
     delete imgIn;
-    img::image<img::rgb>* imgOut;
+    std::unique_ptr<img::image<img::rgb> > imgOut;
     if (rounds < 0) {
         imgOut  = cluster.Borders();
     } else {
         imgOut = cluster.Averages();
     }
-    img::SaveImageGeneric(imgOut, argv[3], img::PNG);
-    delete imgOut;
+    img::SaveImageGeneric(imgOut.get(), argv[3], img::PNG);
     return 0;
 }

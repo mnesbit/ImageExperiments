@@ -2,6 +2,7 @@
 #define _CLUSTER_H_
 
 #include <vector>
+#include <memory>
 #include "../ImageHelper/inc/image.h"
 
 namespace cluster {
@@ -15,8 +16,8 @@ namespace cluster {
 		Clusters(const img::image<img::rgb>* input);
 		~Clusters();
 		void Process(int rounds);
-		img::image<img::rgb>* Averages() const;
-		img::image<img::rgb>* Borders() const;
+		std::unique_ptr<img::image<img::rgb> > Averages() const;
+		std::unique_ptr<img::image<img::rgb> > Borders() const;
 	private:
 		size_t m_height;
 		size_t m_width;

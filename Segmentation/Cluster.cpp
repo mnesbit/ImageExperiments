@@ -299,9 +299,9 @@ namespace cluster {
 			img::yuv acol = img::YUVFromRGB((m_clusters[a].sumr / sza), (m_clusters[a].sumg / sza), (m_clusters[a].sumb / sza));
 			img::yuv bcol = img::YUVFromRGB((m_clusters[b].sumr / szb), (m_clusters[b].sumg / szb), (m_clusters[b].sumb / szb));
 			double tot = square(acol.y - bcol.y) + square(acol.u - bcol.u) + square(acol.v - bcol.v); //squared colour difference of adjacent regions
-			edge.weight = edge.grad + sqrt(tot); // by summing gradient and region difference the gradient helps form sensible groups in early rounds and layter rounds use averaged colour
+			edge.weight = edge.grad + sqrt(tot); // by summing gradient and region difference the gradient helps form sensible groups in early rounds and later rounds use averaged colour
 		}
-		std::sort(m_edges.begin(), m_edges.end()); // sort by weight so that strongest differences are merged first
+		std::sort(m_edges.begin(), m_edges.end()); // sort by weight so that smallest differences are merged first
 	}
 
 	void Clusters::Process(int rounds)
@@ -336,9 +336,9 @@ namespace cluster {
 		}
 	}
 
-	img::image<img::rgb>* Clusters::Averages() const
+	std::unique_ptr<img::image<img::rgb> > Clusters::Averages() const
 	{
-		img::image<img::rgb>* output = new img::image<img::rgb>(m_width, m_height);
+		std::unique_ptr<img::image<img::rgb> > output = std::make_unique<img::image<img::rgb> >(m_width, m_height);
 		for (size_t y = 0; y < m_height; y++)
 		{
 			for (size_t x = 0; x < m_width; x++)
@@ -353,9 +353,9 @@ namespace cluster {
 		return output;
 	}
 
-	img::image<img::rgb>* Clusters::Borders() const
+	std::unique_ptr<img::image<img::rgb> > Clusters::Borders() const
 	{
-		img::image<img::rgb>* output = new img::image<img::rgb>(m_width, m_height, true);
+		std::unique_ptr<img::image<img::rgb> > output = std::make_unique<img::image<img::rgb> >(m_width, m_height, true);
 		std::unordered_map<size_t, img::rgb>  colors;
 		for (auto& edge : m_edges)
 		{
