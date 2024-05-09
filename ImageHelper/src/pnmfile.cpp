@@ -59,7 +59,7 @@ void pnm_read(std::ifstream &file, char (&buf)[N]) {
 }
 
 #pragma warning(disable : 6054) // ignore null termination warnings after pnm_read
-image<uchar> *loadPBM(const char *name) {
+std::unique_ptr<img::image<img::uchar> > loadPBM(const char *name) {
   char buf[BUF_SIZE];
   
   /* read header */
@@ -74,14 +74,14 @@ image<uchar> *loadPBM(const char *name) {
   int height = atoi(buf);
   
   /* read data */
-  image<uchar> *im = new image<uchar>(width, height);
+  std::unique_ptr<img::image<img::uchar> > im = std::make_unique<image<uchar> >(width, height);
   for (int i = 0; i < height; i++)
     read_packed(imPtr(im, 0, i), width, file);
   
   return im;
 }
 
-image<uchar> *loadPBMNoThrow(const char *name) {
+std::unique_ptr<img::image<img::uchar> > loadPBMNoThrow(const char *name) {
   char buf[BUF_SIZE];
   
   /* read header */
@@ -96,7 +96,7 @@ image<uchar> *loadPBMNoThrow(const char *name) {
   int height = atoi(buf);
   
   /* read data */
-  image<uchar> *im = new image<uchar>(width, height);
+  std::unique_ptr<img::image<img::uchar> > im = std::make_unique<image<uchar> >(width, height);
   for (int i = 0; i < height; i++)
     read_packed(imPtr(im, 0, i), width, file);
   
@@ -113,7 +113,7 @@ void savePBM(const image<uchar> *im, const char *name) {
     write_packed(imPtr(im, 0, i), static_cast<int>(width), file);
 }
 
-image<uchar> *loadPGM(const char *name) {
+std::unique_ptr<img::image<img::uchar> > loadPGM(const char *name) {
   char buf[BUF_SIZE];
   
   /* read header */
@@ -132,13 +132,13 @@ image<uchar> *loadPGM(const char *name) {
     throw pnm_error();
 
   /* read data */
-  image<uchar> *im = new image<uchar>(width, height);
+  std::unique_ptr<img::image<img::uchar> > im = std::make_unique<image<uchar> >(width, height);
   file.read((char *)imPtr(im, 0, 0), width * height * sizeof(uchar));
 
   return im;
 }
 
-image<uchar> *loadPGMNoThrow(const char *name) {
+std::unique_ptr<img::image<img::uchar> > loadPGMNoThrow(const char *name) {
   char buf[BUF_SIZE];
   
   /* read header */
@@ -157,7 +157,7 @@ image<uchar> *loadPGMNoThrow(const char *name) {
     throw pnm_error();
 
   /* read data */
-  image<uchar> *im = new image<uchar>(width, height);
+  std::unique_ptr<img::image<img::uchar> > im = std::make_unique<image<uchar> >(width, height);
   file.read((char *)imPtr(im, 0, 0), width * height * sizeof(uchar));
 
   return im;
@@ -172,7 +172,7 @@ void savePGM(const image<uchar> *im, const char *name) {
   file.write((char *)imPtr(im, 0, 0), width * height * sizeof(uchar));
 }
 
-image<rgb> *loadPPM(const char *name) {
+std::unique_ptr<img::image<img::rgb> > loadPPM(const char *name) {
   char buf[BUF_SIZE];
   
   /* read header */
@@ -191,13 +191,13 @@ image<rgb> *loadPPM(const char *name) {
     throw pnm_error();
 
   /* read data */
-  image<rgb> *im = new image<rgb>(width, height);
+  std::unique_ptr<img::image<img::rgb> > im = std::make_unique<image<rgb> >(width, height);
   file.read((char *)imPtr(im, 0, 0), width * height * sizeof(rgb));
 
   return im;
 }
 
-image<rgb> *loadPPMNoThrow(const char *name) {
+std::unique_ptr<img::image<img::rgb> > loadPPMNoThrow(const char *name) {
   char buf[BUF_SIZE];
   
   /* read header */
@@ -216,7 +216,7 @@ image<rgb> *loadPPMNoThrow(const char *name) {
     throw pnm_error();
 
   /* read data */
-  image<rgb> *im = new image<rgb>(width, height);
+  std::unique_ptr<img::image<img::rgb> > im = std::make_unique<image<rgb> >(width, height);
   file.read((char *)imPtr(im, 0, 0), width * height * sizeof(rgb));
 
   return im;

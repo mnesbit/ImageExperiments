@@ -58,7 +58,7 @@ static void writeDictionaryToPNG(const math::Matrix& dictionary, std::string fil
 	}
 	size_t approxWidth = static_cast<size_t>(sqrt(dictionary.Rows()));
 	size_t approxHeight = (dictionary.Rows() / approxWidth) + ((dictionary.Rows() % approxWidth == 0) ? 0 : 1);
-	image<double>* basisPic = new image<double>(approxWidth * blockSize, approxHeight * blockSize);
+	std::unique_ptr<image<double> > basisPic = std::make_unique<image<double> >(approxWidth * blockSize, approxHeight * blockSize);
 	for (size_t i = 0; i < dictionary.Rows(); ++i) {
 		size_t blockx = i % approxWidth;
 		size_t blocky = i / approxWidth;
@@ -68,8 +68,8 @@ static void writeDictionaryToPNG(const math::Matrix& dictionary, std::string fil
 			}
 		}
 	}
-	SaveImageGeneric(basisPic, fileName.c_str(), imgFormat::PNG);
-	delete basisPic;
+	SaveImageGeneric(basisPic.get(), fileName.c_str(), imgFormat::PNG);
+	basisPic.release();
 }
 
 static void printUsage() {
@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
 			return -1;
 		}
 		std::cout << "create basis function" << std::endl;
-		image<rgb>* imgIn = LoadImageGenericRGB(argv[3]);
+		std::unique_ptr<image<rgb> > imgIn = LoadImageGenericRGB(argv[3]);
 		std::unique_ptr<CompressionContextFast> context;
 		if (std::string(argv[2]) == "max") {
 			context = createCompressionContextFast(K, BlockSize, 0.0);
@@ -115,13 +115,13 @@ int main(int argc, char* argv[]) {
 		std::cout << std::format("start processing image {} using largest {} coefficients.", argv[3], K) << std::endl;
 		size_t outputBytesSize;
 		std::unique_ptr<uint8_t[]> encodedBytes = encodeImageFast(
-			imgIn,
+			imgIn.get(),
 			K,
 			BlockSize,
 			context->Y.Quant, context->U.Quant, context->V.Quant,
 			context->Y.Dynamic, context->U.Dynamic, context->V.Dynamic,
 			outputBytesSize);
-		delete imgIn;
+		imgIn.reset();
 		std::cout << std::format("bpp {} total KB {}", static_cast<double>(8ULL * outputBytesSize) / static_cast<double>(imgIn->width() * imgIn->height()), outputBytesSize / 1024ULL) << std::endl;
 		std::ofstream fileOut;
 		fileOut.open(argv[4], std::ios::out | std::ios::trunc |std::ios::binary);
@@ -134,13 +134,13 @@ int main(int argc, char* argv[]) {
 		}
 		std::ifstream fileIn(argv[2], std::ios::binary |std::ios::in | std::ios::ate);
 		std::ifstream::pos_type len = fileIn.tellg();
-		uint8_t* buffer = new uint8_t[len];
+		std::unique_ptr<uint8_t[]> buffer = std::make_unique<uint8_t[]>(len);
 		fileIn.seekg(0, std::ios::beg);
-		fileIn.read(reinterpret_cast<char*>(buffer), len);
-		image<rgb>* imgOut = decodeImageFast(buffer, len);
-		delete[] buffer;
-		img::SaveImageGeneric(imgOut, argv[3], imgFormat::PNG);
-		delete imgOut;
+		fileIn.read(reinterpret_cast<char*>(buffer.get()), len);
+		std::unique_ptr<image<rgb> > imgOut = decodeImageFast(buffer.get(), len);
+		buffer.reset();
+		img::SaveImageGeneric(imgOut.get(), argv[3], imgFormat::PNG);
+		imgOut.reset();
 	} else if (mode == "-n") {
 		if (argc != 4 && argc != 5) {
 			printUsage();
@@ -148,7 +148,7 @@ int main(int argc, char* argv[]) {
 		}
 		const auto start = std::chrono::system_clock::now();
 		std::cout << "create basis function" << std::endl;
-		image<rgb>* imgIn = LoadImageGenericRGB(argv[3]);
+		std::unique_ptr<image<rgb> > imgIn = LoadImageGenericRGB(argv[3]);
 		std::unique_ptr<CompressionContextFast> context;
 		if (std::string(argv[2]) == "max") {
 			context = createCompressionContextFast(K, BlockSize, 0.0);
@@ -164,36 +164,36 @@ int main(int argc, char* argv[]) {
 		std::cout << std::format("start processing image {} using largest {} coefficients.", argv[3], K) << std::endl;
 		size_t outputBytesSize;
 		std::unique_ptr<uint8_t[]> encodedBytes = encodeImageFast(
-			imgIn,
+			imgIn.get(),
 			K,
 			BlockSize,
 			context->Y.Quant, context->U.Quant, context->V.Quant,
 			context->Y.Dynamic, context->U.Dynamic, context->V.Dynamic,
 			outputBytesSize);
-		image<rgb>* imgOut = decodeImageFast(encodedBytes.get(), outputBytesSize);
+		std::unique_ptr<image<rgb> > imgOut = decodeImageFast(encodedBytes.get(), outputBytesSize);
 		const auto end = std::chrono::system_clock::now();
 		std::cout << duration_cast<std::chrono::milliseconds>(end - start) << std::endl;
-		double psnr = calculatePSNR(imgIn, imgOut);
+		double psnr = calculatePSNR(imgIn.get(), imgOut.get());
 		std::cout << std::format("PSNR {} bpp {} total KB {}", psnr, static_cast<double>(8ULL * outputBytesSize) / static_cast<double>(imgOut->width() * imgOut->height()), outputBytesSize / 1024ULL) << std::endl;
-		delete imgIn;
+		imgIn.reset();
 		if (argc == 5) {
-			SaveImageGeneric(imgOut, argv[4], imgFormat::PNG);
+			SaveImageGeneric(imgOut.get(), argv[4], imgFormat::PNG);
 		}
-		delete imgOut;
+		imgOut.reset();
 	} else if (mode == "-j") {
 		if (argc != 4) {
 			printUsage();
 			return -1;
 		}
 		int quality = atoi(argv[2]);
-		image<rgb>* imgIn = LoadImageGenericRGB(argv[3]);
+		std::unique_ptr<image<rgb> > imgIn = LoadImageGenericRGB(argv[3]);
 		char tmpFileName[L_tmpnam_s];
 		tmpnam_s(tmpFileName, L_tmpnam_s);
-		img::SaveImageGeneric(imgIn, tmpFileName, imgFormat::JPEG, quality); //convert to JPEG
+		img::SaveImageGeneric(imgIn.get(), tmpFileName, imgFormat::JPEG, quality); //convert to JPEG
 		size_t jpegSize = std::filesystem::file_size(tmpFileName);
-		image<rgb>* imgConv = LoadImageGenericRGB(tmpFileName);
-		double jpegpsnr = calculatePSNR(imgIn, imgConv);
-		delete imgConv;
+		std::unique_ptr<image<rgb> > imgConv = LoadImageGenericRGB(tmpFileName);
+		double jpegpsnr = calculatePSNR(imgIn.get(), imgConv.get());
+		imgConv.reset();
 		std::cout << std::format("JPEG PSNR {} bpp {} total KB {}", jpegpsnr, static_cast<double>(8ULL * jpegSize) / static_cast<double>(imgIn->width() * imgIn->height()), jpegSize / 1024ULL) << std::endl;
 		std::filesystem::remove(tmpFileName);
 	} else if (mode == "-s") {
@@ -229,9 +229,9 @@ int main(int argc, char* argv[]) {
 			if (lowerCaseName.ends_with(".jpg") || lowerCaseName.ends_with(".tif")) {
 				std::cout << std::format("processing: {} {}%", file, (100L * count) / files.size()) << std::endl;
 				imgFormat format;
-				image<rgb>* image = LoadImageGenericRGB(file.c_str(), &format);
+				std::unique_ptr<image<rgb> > image = LoadImageGenericRGB(file.c_str(), &format);
 				if (image->width() < BlockSize || image->height() < BlockSize) {
-					delete image;
+					image.reset();
 					continue;
 				}
 				for (int reps = 0; reps < patchesPerImage; ++reps) {
@@ -268,7 +268,7 @@ int main(int argc, char* argv[]) {
 						selectStatsV[i].update((delta));
 					}
 				}
-				delete image;
+				image.reset();
 			}
 		}
 		std::ofstream fileOut;
@@ -313,15 +313,15 @@ int main(int argc, char* argv[]) {
 			transform(file.cbegin(), file.cend(), lowerCaseName.begin(), ::tolower);
 			if (lowerCaseName.ends_with(".jpg") || lowerCaseName.ends_with(".tif")) {
 				std::cout << std::format("JPEG processing: {} {}%", file, (100L * count) / files.size()) << std::endl;
-				image<rgb>* imgIn = LoadImageGenericRGB(file.c_str());
+				std::unique_ptr<image<rgb> > imgIn = LoadImageGenericRGB(file.c_str());
 				for (int quality = 100; quality >= 10; quality -= 20) {
 					char tmpFileName[L_tmpnam_s];
 					tmpnam_s(tmpFileName, L_tmpnam_s);
-					img::SaveImageGeneric(imgIn, tmpFileName, imgFormat::JPEG, quality); //convert to JPEG
+					img::SaveImageGeneric(imgIn.get(), tmpFileName, imgFormat::JPEG, quality); //convert to JPEG
 					size_t jpegSize = std::filesystem::file_size(tmpFileName);
-					image<rgb>* imgConv = LoadImageGenericRGB(tmpFileName);
-					double psnr = calculatePSNR(imgIn, imgConv);
-					delete imgConv;
+					std::unique_ptr<image<rgb> > imgConv = LoadImageGenericRGB(tmpFileName);
+					double psnr = calculatePSNR(imgIn.get(), imgConv.get());
+					imgConv.reset();
 					std::filesystem::remove(tmpFileName);
 					double bpp = static_cast<double>(8ULL * jpegSize) / static_cast<double>(imgIn->width() * imgIn->height());
 					std::cout << std::format("JPEG Quality {} PSNR {} bpp {} total KB {}", quality, psnr, bpp, jpegSize / 1024ULL) << std::endl;
@@ -332,20 +332,20 @@ int main(int argc, char* argv[]) {
 					std::cout << std::format("MP processing: {} {}%", file, (100L * count) / files.size()) << std::endl;
 					size_t outputBytesSize;
 					std::unique_ptr<uint8_t[]> encodedBytes = encodeImageFast(
-						imgIn,
+						imgIn.get(),
 						K,
 						BlockSize,
 						context->Y.Quant, context->U.Quant, context->V.Quant,
 						context->Y.Dynamic, context->U.Dynamic, context->V.Dynamic,
 						outputBytesSize);
-					image<rgb>* imgOut = decodeImageFast(encodedBytes.get(), outputBytesSize);
-					double psnr = calculatePSNR(imgIn, imgOut);
-					delete imgOut;
+					std::unique_ptr<image<rgb> > imgOut = decodeImageFast(encodedBytes.get(), outputBytesSize);
+					double psnr = calculatePSNR(imgIn.get(), imgOut.get());
+					imgOut.reset();
 					double bpp = static_cast<double>(8ULL * outputBytesSize) / static_cast<double>(imgIn->width() * imgIn->height());
 					std::cout << std::format("MP Quality {} PSNR {} bpp {} total KB {}", bppAllocation, psnr, bpp, outputBytesSize) << std::endl;
 					fileOut << std::format("{}, {}, {}, {}, {}, {}", file, "MP", bppAllocation, outputBytesSize, bpp, psnr) << std::endl;
 				}
-				delete imgIn;
+				imgIn.reset();
 			}
 			fileOut.flush();
 		}

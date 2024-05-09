@@ -215,7 +215,7 @@ void writeDictionaryToPNG(math::Matrix dictionary, std::string fileName) {
 	}
 	size_t approxWidth = static_cast<size_t>(sqrt(dictionary.Rows()));
 	size_t approxHeight = (dictionary.Rows() / approxWidth) + ((dictionary.Rows() % approxWidth == 0) ? 0 : 1);
-	image<double>* basisPic = new image<double>(approxWidth * blockSize, approxHeight * blockSize);
+	std::unique_ptr<image<double> > basisPic = std::make_unique<image<double> >(approxWidth * blockSize, approxHeight * blockSize);
 	for (size_t i = 0; i < dictionary.Rows(); ++i) {
 		size_t blockx = i % approxWidth;
 		size_t blocky = i / approxWidth;
@@ -225,8 +225,8 @@ void writeDictionaryToPNG(math::Matrix dictionary, std::string fileName) {
 			}
 		}
 	}
-	SaveImageGeneric(basisPic, fileName.c_str(), imgFormat::PNG);
-	delete basisPic;
+	SaveImageGeneric(basisPic.get(), fileName.c_str(), imgFormat::PNG);
+	basisPic.reset();
 }
 
 enum class Mode {
@@ -355,13 +355,13 @@ int main(int argc, char* argv[])
 		return dictionary;
 	};
 
-	image<double>* imgIn = LoadImageGenericMono(argv[4]);
+	std::unique_ptr<image<double> > imgIn = LoadImageGenericMono(argv[4]);
 	std::cout << std::format("start processing image {} using largest {} coefficients.", argv[4], K) << std::endl;
 	const size_t width = imgIn->width();
 	const size_t height = imgIn->height();
-	image<double>* imgOut = new image<double>(width, height, false);
-	double* squaredError = new double[K];
-	double* summedMagnitude = new double[K];
+	std::unique_ptr<image<double> > imgOut = std::make_unique<image<double> >(width, height, false);
+	std::unique_ptr<double[]> squaredError = std::make_unique<double[]>(K);
+	std::unique_ptr<double[]> summedMagnitude = std::make_unique<double[]>(K);
 	for (int i = 0; i < K; ++i) {
 		squaredError[i] = 0.0;
 		summedMagnitude[i] = 0.0;
@@ -384,19 +384,19 @@ int main(int argc, char* argv[])
 					}
 				}
 			}
-			BasisChoice* choices = new BasisChoice[K];
+			std::unique_ptr<BasisChoice[]> choices = std::make_unique<BasisChoice[]>(K);
 			math::Vector decoded;
 			switch (mode) {
 				case Mode::DCT:
 				case Mode::KLT:
 				case Mode::SEG: {
-					CalcOMPStatic(K, choices, block, baseDict);
-					decoded = FromCoeffsStatic(K, choices, baseDict, block, squaredError, summedMagnitude);
+					CalcOMPStatic(K, choices.get(), block, baseDict);
+					decoded = FromCoeffsStatic(K, choices.get(), baseDict, block, squaredError.get(), summedMagnitude.get());
 					break;
 				}
 				case Mode::SEG_KLT: {
-					CalcOMPDynamic(K, choices, block, dynamic);
-					decoded = FromCoeffsDynamic(K, choices, dynamic, block, squaredError, summedMagnitude);
+					CalcOMPDynamic(K, choices.get(), block, dynamic);
+					decoded = FromCoeffsDynamic(K, choices.get(), dynamic, block, squaredError.get(), summedMagnitude.get());
 					break;
 				}
 			}
@@ -410,8 +410,7 @@ int main(int argc, char* argv[])
 					}
 				}
 			}
-			delete[] choices;
-
+			choices.reset();
 		}
 	}
 	std::cout << std::format("Results of {} mode up to {} coefficients on {} x {} blocks", modeStr, K, BlockSize, BlockSize) << std::endl;
@@ -421,11 +420,7 @@ int main(int argc, char* argv[])
 		double averageMag = summedMagnitude[i] / (width * height);
 		std::cout << std::format("PSNR at {} coefficients {} average magnitude {}", i + 1, psnr, averageMag) << std::endl;
 	}
-	SaveImageGeneric(imgOut, argv[5], imgFormat::PNG);
-	delete imgIn;
-	delete imgOut;
-	delete[] squaredError;
-	delete[] summedMagnitude;
+	SaveImageGeneric(imgOut.get(), argv[5], imgFormat::PNG);
     return 0;
 }
 

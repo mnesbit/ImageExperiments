@@ -182,7 +182,7 @@ namespace bitbuffer {
 
 	std::unique_ptr<uint8_t[]> BitBuffer::Save(size_t& byteLength) const {
 		byteLength = 8ULL * m_writeWordPos + ((m_writeBitPos + 7ULL) / 8ULL);
-		std::unique_ptr<uint8_t[]> data = std::unique_ptr<uint8_t[]>(new uint8_t[byteLength]);
+		std::unique_ptr<uint8_t[]> data = std::make_unique<uint8_t[]>(byteLength);
 		for (size_t offset = 0; offset < m_writeWordPos; ++offset) {
 			uint64_t value = m_bits[offset];
 			data[8ULL * offset] = static_cast<uint8_t>(value >> 56);

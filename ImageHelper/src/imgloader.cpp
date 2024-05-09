@@ -81,7 +81,7 @@ static imgFormat GetFormat(Gdiplus::Image* gdiimage)
 	return INVALID;
 }
 
-image<rgb>* LoadGDIPlusToRGB(const char* filename, imgFormat* format) {
+std::unique_ptr<image<rgb> > LoadGDIPlusToRGB(const char* filename, imgFormat* format) {
 	ULONG_PTR gdiplusToken;
 	if (s_Token == 0UL) {
 		Gdiplus::GdiplusStartupInput gdiplusStartupInput;
@@ -120,7 +120,7 @@ image<rgb>* LoadGDIPlusToRGB(const char* filename, imgFormat* format) {
 	Gdiplus::Rect fullRect(0, 0, width, height);
 	tempBMP->LockBits(&fullRect, Gdiplus::ImageLockModeRead, PixelFormat32bppPARGB, &bitmapData);
 	unsigned int* pRaw = (unsigned int*)bitmapData.Scan0;
-	image<rgb>* output = new image<rgb>(width, height, false);
+	std::unique_ptr<image<rgb> > output = std::make_unique<image<rgb> >(width, height, false);
 	for (int x = 0; x < width; x++)
 	{
 		for (int y = 0; y < height; y++)
@@ -142,9 +142,9 @@ image<rgb>* LoadGDIPlusToRGB(const char* filename, imgFormat* format) {
 	return output;
 }
 
-image<rgb>* LoadImageGenericRGB(const char* filename,imgFormat* format)
+std::unique_ptr<image<rgb> > LoadImageGenericRGB(const char* filename,imgFormat* format)
 {
-	image<rgb>* output=0;
+	std::unique_ptr<image<rgb> >  output;
 	if(format)*format=INVALID;
 	output=loadPPMNoThrow(filename);
 	if(output)
@@ -152,10 +152,10 @@ image<rgb>* LoadImageGenericRGB(const char* filename,imgFormat* format)
 		if(format)*format=PNM;
 		return output;
 	}
-	image<uchar>*grey=loadPGMNoThrow(filename);
+	std::unique_ptr<image<uchar> > grey=loadPGMNoThrow(filename);
 	if(grey)
 	{
-		output=new image<rgb>(grey->width(),grey->height(),false);
+		output=std::make_unique<image<rgb> >(grey->width(),grey->height(),false);
 		for(int x=0;x<grey->width();x++)
 		{
 			for(int y=0;y<grey->height();y++)
@@ -165,21 +165,21 @@ image<rgb>* LoadImageGenericRGB(const char* filename,imgFormat* format)
 				imRef(output,x,y).b=imRef(grey,x,y);
 			}
 		}
-		delete grey;
+		grey.reset();
 		if(format)*format=PNM;
 		return output;
 	}
 	return LoadGDIPlusToRGB(filename, format);
 }
 
-image<double>* LoadImageGenericMono(const char* filename,imgFormat* format)
+std::unique_ptr<image<double> > LoadImageGenericMono(const char* filename,imgFormat* format)
 {
-	image<double>* output=0;
+	std::unique_ptr<image<double> > output;
 	if(format)*format=INVALID;
-	img::image<img::rgb>*colour=loadPPMNoThrow(filename);
+	std::unique_ptr<image<rgb> > colour=loadPPMNoThrow(filename);
 	if(colour)
 	{
-		output=new image<double>(colour->width(),colour->height(),false);
+		output=std::make_unique<image<double> >(colour->width(),colour->height(),false);
 		for(int x=0;x<colour->width();x++)
 		{
 			for(int y=0;y<colour->height();y++)
@@ -187,14 +187,14 @@ image<double>* LoadImageGenericMono(const char* filename,imgFormat* format)
 				imRef(output,x,y)=YFromRGB(imRef(colour,x,y));
 			}
 		}
-		delete colour;
+		colour.reset();
 		if(format)*format=PNM;
 		return output;
 	}
-	image<uchar>*grey=loadPGMNoThrow(filename);
+	std::unique_ptr<image<uchar> > grey=loadPGMNoThrow(filename);
 	if(grey)
 	{
-		output=new image<double>(grey->width(),grey->height(),false);
+		output=std::make_unique<image<double> >(grey->width(),grey->height(),false);
 		for(int x=0;x<grey->width();x++)
 		{
 			for(int y=0;y<grey->height();y++)
@@ -202,12 +202,12 @@ image<double>* LoadImageGenericMono(const char* filename,imgFormat* format)
 				imRef(output,x,y)=(double)imRef(grey,x,y);
 			}
 		}
-		delete grey;
+		grey.reset();
 		if(format)*format=PNM;
 		return output;
 	}
 	colour = LoadGDIPlusToRGB(filename, format);
-	output = new image<double>(colour->width(), colour->height(), false);
+	output = std::make_unique<image<double> >(colour->width(), colour->height(), false);
 	for (int x = 0; x < colour->width(); x++)
 	{
 		for (int y = 0; y < colour->height(); y++)
@@ -215,7 +215,7 @@ image<double>* LoadImageGenericMono(const char* filename,imgFormat* format)
 			imRef(output, x, y) = YFromRGB(imRef(colour, x, y));
 		}
 	}
-	delete colour;
+	colour.reset();
 	return output;
 }
 

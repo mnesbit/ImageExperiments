@@ -11,10 +11,10 @@ int main(int argc, char* argv[])
         return -1;
     }
     int rounds = atoi(argv[1]);
-    img::image<img::rgb>* imgIn = img::LoadImageGenericRGB(argv[2]);
-    cluster::Clusters cluster(imgIn);
+    std::unique_ptr<img::image<img::rgb> > imgIn = img::LoadImageGenericRGB(argv[2]);
+    cluster::Clusters cluster(imgIn.get());
     cluster.Process(abs(rounds));
-    delete imgIn;
+    imgIn.reset();
     std::unique_ptr<img::image<img::rgb> > imgOut;
     if (rounds < 0) {
         imgOut  = cluster.Borders();

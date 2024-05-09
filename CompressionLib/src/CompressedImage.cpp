@@ -289,7 +289,7 @@ namespace compressed {
 	};
 
 	std::unique_ptr<CompressionContext> createCompressionContext(size_t K, size_t blockSize, double bppAllocation) {
-		std::unique_ptr<CompressionContext> context = std::unique_ptr<CompressionContext>(new CompressionContext);
+		std::unique_ptr<CompressionContext> context = std::make_unique<CompressionContext>();
 		context->K = K;
 		context->BlockSize = blockSize;
 		createQuantizationTables(K, blockSize, bppAllocation, context->Y.Quant, context->U.Quant, context->V.Quant);
@@ -315,7 +315,7 @@ namespace compressed {
 	}
 
 	std::unique_ptr<CompressionContextFast> createCompressionContextFast(size_t K, size_t blockSize, double bppAllocation) {
-		std::unique_ptr<CompressionContextFast> context = std::unique_ptr<CompressionContextFast>(new CompressionContextFast);
+		std::unique_ptr<CompressionContextFast> context = std::make_unique<CompressionContextFast>();
 		context->K = K;
 		context->BlockSize = blockSize;
 		createQuantizationTables(K, blockSize, bppAllocation, context->Y.Quant, context->U.Quant, context->V.Quant);
@@ -780,7 +780,7 @@ namespace compressed {
 		return context;
 	}
 
-	image<rgb>* decodeImage(const uint8_t bytes[], size_t byteSize) {
+	std::unique_ptr<image<rgb> > decodeImage(const uint8_t bytes[], size_t byteSize) {
 		size_t width;
 		size_t height;
 		size_t K;
@@ -788,7 +788,7 @@ namespace compressed {
 		std::vector<uint16_t> lengths;
 		std::vector<std::vector<uint16_t> > codes;
 		std::unique_ptr<CompressionContext> context = readCompressed(bytes, byteSize, K, blockSize, width, height, lengths, codes);
-		image<rgb>* imgOut = new image<rgb>(width, height, false);
+		std::unique_ptr<image<rgb> > imgOut = std::make_unique<image<rgb> >(width, height, false);
 		std::vector<size_t> offsets(3 * K);
 		size_t lengthOffset = 0;
 		std::vector<BasisChoice> choicesY(K);
@@ -834,7 +834,7 @@ namespace compressed {
 		return imgOut;
 	}
 
-	image<rgb>* decodeImageFast(const uint8_t bytes[], size_t byteSize) {
+	std::unique_ptr<image<rgb> > decodeImageFast(const uint8_t bytes[], size_t byteSize) {
 		size_t width;
 		size_t height;
 		size_t K;
@@ -842,7 +842,7 @@ namespace compressed {
 		std::vector<uint16_t> lengths;
 		std::vector<std::vector<uint16_t> > codes;
 		std::unique_ptr<CompressionContextFast> context = readCompressedFast(bytes, byteSize, K, blockSize, width, height, lengths, codes);
-		image<rgb>* imgOut = new image<rgb>(width, height, false);
+		std::unique_ptr<image<rgb> > imgOut = std::make_unique<image<rgb> >(width, height, false);
 		std::vector<size_t> offsets(3 * K);
 		size_t lengthOffset = 0;
 		std::vector<BasisChoice> choicesY(K);

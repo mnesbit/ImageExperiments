@@ -72,8 +72,8 @@ namespace compressed {
 		const matching::DynamicDictionaryFunctionFast& dynamicY, const matching::DynamicDictionaryFunctionFast& dynamicU, const matching::DynamicDictionaryFunctionFast& dynamicV,
 		size_t& outputByteSize);
 
-	img::image<img::rgb>* decodeImage(const uint8_t bytes[], size_t byteSize);
-	img::image<img::rgb>* decodeImageFast(const uint8_t bytes[], size_t byteSize);
+	std::unique_ptr < img::image<img::rgb> > decodeImage(const uint8_t bytes[], size_t byteSize);
+	std::unique_ptr < img::image<img::rgb> > decodeImageFast(const uint8_t bytes[], size_t byteSize);
 }
 
 #endif //_COMPRESSED_IMAGE_H_

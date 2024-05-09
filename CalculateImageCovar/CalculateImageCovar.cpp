@@ -56,9 +56,9 @@ int main(int argc, char* argv[]) {
         if (lowerCaseName.ends_with(".jpg")) {
             std::cout << std::format("processing: {} {}%", file, (100L * count)/files.size()) << std::endl;
             imgFormat format;
-            image<rgb>* image = LoadImageGenericRGB(file.c_str(), &format);
+            std::unique_ptr<image<rgb> > image = LoadImageGenericRGB(file.c_str(), &format);
             if (image->width() < N || image->height() < N) {
-                delete image;
+                image.reset();
                 continue;
             }
             for (int reps = 0; reps < patchesPerImage; ++reps) {
@@ -71,13 +71,13 @@ int main(int argc, char* argv[]) {
                 }
                 covar.Update(patch);
             }
-            delete image;
+            image.reset();
             covar.Covariance().Save(outputFile.c_str());
         }
     }
     if (argc == 6) {
         math::Matrix outputCovar = covar.Covariance();
-        image<double>* img = new image<double>(N * N, N * N, false);
+        std::unique_ptr<image<double> > img = std::make_unique<image<double> >(N * N, N * N, false);
         for (int x = 0; x < N * N; ++x) {
             int x1 = x % N;
             int y1 = x / N;
@@ -88,8 +88,8 @@ int main(int argc, char* argv[]) {
             }
         }
         std::cout << "writing covariance image file to: " << argv[5] << std::endl;
-        SaveImageGeneric(img, argv[5], imgFormat::PNG);
-        delete img;
+        SaveImageGeneric(img.get(), argv[5], imgFormat::PNG);
+        img.reset();
     }
     Shutdown();
     return 0;
