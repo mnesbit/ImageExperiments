@@ -22,12 +22,17 @@ namespace img
 
 	rgb RGBFromYUV(yuv in)
 	{
+		return RGBFromYUV(in.y, in.u, in.v);
+	}
+
+	rgb RGBFromYUV(double y, double u, double v) {
 		rgb retval{
-			.r = static_cast<uchar>(std::clamp(std::round(in.y + 1.13983 * in.v), 0.0, 255.0)),
-			.g = static_cast<uchar>(std::clamp(std::round(in.y - 0.39466 * in.u - 0.58060 * in.v), 0.0, 255.0)),
-			.b = static_cast<uchar>(std::clamp(std::round(in.y + 2.03211 * in.u), 0.0, 255.0))
+			.r = static_cast<uchar>(std::clamp(std::round(y + 1.13983 * v), 0.0, 255.0)),
+			.g = static_cast<uchar>(std::clamp(std::round(y - 0.39466 * u - 0.58060 * v), 0.0, 255.0)),
+			.b = static_cast<uchar>(std::clamp(std::round(y + 2.03211 * u), 0.0, 255.0))
 		};
 		return retval;
+
 	}
 
 	double YFromRGB(rgb in)

@@ -16,8 +16,8 @@ namespace matching {
 		unsigned short intCoeff;
 	} BasisChoice;
 
-	typedef std::function <math::Matrix(int, const std::vector<BasisChoice>)> DynamicDictionaryFunction;
-	typedef std::function <Eigen::MatrixXf(int, const std::vector<BasisChoice>)> DynamicDictionaryFunctionFast;
+	typedef std::function <math::Matrix(int, const std::vector<BasisChoice>&)> DynamicDictionaryFunction;
+	typedef std::function <Eigen::MatrixXf(int, const std::vector<BasisChoice>&)> DynamicDictionaryFunctionFast;
 
 	int CalcMPDynamic(int K, const double quantization[], std::vector<BasisChoice>& results, const math::Vector& input, const DynamicDictionaryFunction& dynamicDictionary);
 	int CalcMPDynamicFast(int K, const Eigen::VectorXf& quantization, std::vector<BasisChoice>& results, const Eigen::VectorXf& input, const DynamicDictionaryFunctionFast& dynamicDictionary);

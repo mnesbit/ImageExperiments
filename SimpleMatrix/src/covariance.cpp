@@ -77,5 +77,26 @@ void CovarianceCalculator::Update(Vector input) {
 	}
 }
 
+void CovarianceCalculator::Update(const CovarianceCalculator& other) {
+	if (m_means.Length() != other.m_means.Length()) {
+		throw new std::range_error("mismatched sizes");
+	}
+	double n1 = static_cast<double>(m_N);
+	double n2 = static_cast<double>(other.m_N);
+	double nsum = static_cast<double>(m_N + other.m_N);
+	double ratio = (n1 * n2) / nsum;
+	for (int x = 0; x < m_means.Length(); ++x) {
+		double deltax = m_means[x] - other.m_means[x];
+		for (int y = 0; y < m_means.Length(); ++y) {
+			double deltay = m_means[y] - other.m_means[y];
+			m_covariance[x][y] = m_covariance[x][y] + other.m_covariance[x][y] + (ratio * deltax * deltay);
+		}
+	}
+	for (int x = 0; x < m_means.Length(); ++x) {
+		m_means[x] = ((n1 * m_means[x]) + (n2 * other.m_means[x])) / nsum;
+	}
+	m_N += other.m_N;
+}
+
 
 }

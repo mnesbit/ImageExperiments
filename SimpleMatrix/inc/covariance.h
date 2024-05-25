@@ -29,6 +29,7 @@ namespace math {
 		CovarianceCalculator& operator=(const CovarianceCalculator& calculator);
 
 		void Update(Vector input);
+		void Update(const CovarianceCalculator& other);
 
 		int Length() const { return m_N;  }
 
@@ -37,6 +38,12 @@ namespace math {
 		Matrix Covariance() const {
 			Matrix cov(m_covariance);
 			cov.Scale(1.0 / m_N);
+			return cov;
+		}
+
+		Matrix SampleCovariance() const {
+			Matrix cov(m_covariance);
+			cov.Scale(1.0 / static_cast<double>(m_N - 1));
 			return cov;
 		}
 	private:

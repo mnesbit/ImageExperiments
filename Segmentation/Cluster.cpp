@@ -138,7 +138,7 @@ namespace cluster {
 						if (dx >= -2
 							&& dx <= 2
 							&& dy >= -2
-							&& dy <= 2) // use 5 x 5 differentiator for Y channel
+							&& dy <= 2) // use 5 x 5 differentiator for Y channel as signal is strong and we can get better localisation
 						{
 							double coeff = g_diff_5[dx + 2] * g_interp_5[dy + 2];
 							double coeff2 = g_diff_5[dy + 2] * g_interp_5[dx + 2];
@@ -148,7 +148,7 @@ namespace cluster {
 						if (dx >= -3
 							&& dx <= 3
 							&& dy >= -3
-							&& dy <= 3) // use 7 x 7 differentiator for U channel
+							&& dy <= 3) // use 7 x 7 differentiator for U channel as signal is weaker and needs bigger area to reduce noise
 						{
 							double coeff = g_diff_7[dx + 3] * g_interp_7[dy + 3];
 							double coeff2 = g_diff_7[dy + 3] * g_interp_7[dx + 3];
@@ -156,7 +156,7 @@ namespace cluster {
 							totyg += coeff2 * pt2.u;
 						}
 						{
-							// use 9 x 9 differentiator for V channel
+							// use 9 x 9 differentiator for V channel as signal is noisiest and least specific localisation
 							double coeff = g_diff_9[dx + 4] * g_interp_9[dy + 4];
 							double coeff2 = g_diff_9[dy + 4] * g_interp_9[dx + 4];
 							totxb += coeff * pt2.v;
@@ -322,7 +322,7 @@ namespace cluster {
 				size_t b = Find(edge.b);
 				if (a != b)
 				{
-					if ((GetMark(a) == -1) || (GetMark(b) == -1)) // we require at least one of the mergees to be untouched in this round.
+					if ((GetMark(a) == -1) || (GetMark(b) == -1)) // we require at least one of the mergees to be untouched in this round to prevent runaway merging.
 					{
 						Join(edge);
 						joins++;
