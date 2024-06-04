@@ -44,6 +44,7 @@ namespace basis {
 	std::vector<Line> distinctLineShapes(size_t blockSize);
 
 	math::Matrix createSegmentDictionary(size_t blockSize, const std::vector<Line>& basisSet);
+	math::Matrix createSeparatorDictionary(size_t blockSize, const std::vector<Line>& basisSet);
 	Eigen::MatrixXf createSegmentDictionaryFast(size_t blockSize, const std::vector<Line>& basisSet);
 
 	math::Matrix createIntraSegmentDictionary(size_t blockSize, const Line& segmentMask, CovarianceModel model);

@@ -121,8 +121,8 @@ int main(int argc, char* argv[]) {
 			context->Y.Quant, context->U.Quant, context->V.Quant,
 			context->Y.Dynamic, context->U.Dynamic, context->V.Dynamic,
 			outputBytesSize);
-		imgIn.reset();
 		std::cout << std::format("bpp {} total KB {}", static_cast<double>(8ULL * outputBytesSize) / static_cast<double>(imgIn->width() * imgIn->height()), outputBytesSize / 1024ULL) << std::endl;
+		imgIn.reset();
 		std::ofstream fileOut;
 		fileOut.open(argv[4], std::ios::out | std::ios::trunc |std::ios::binary);
 		fileOut.write(reinterpret_cast<const char*>(encodedBytes.get()), outputBytesSize);
@@ -195,6 +195,7 @@ int main(int argc, char* argv[]) {
 		double jpegpsnr = calculatePSNR(imgIn.get(), imgConv.get());
 		imgConv.reset();
 		std::cout << std::format("JPEG PSNR {} bpp {} total KB {}", jpegpsnr, static_cast<double>(8ULL * jpegSize) / static_cast<double>(imgIn->width() * imgIn->height()), jpegSize / 1024ULL) << std::endl;
+		imgIn.reset();
 		std::filesystem::remove(tmpFileName);
 	} else if (mode == "-s") {
 		if (argc != 6) {

@@ -379,6 +379,54 @@ namespace basis {
 		return dictionary;
 	}
 
+	math::Vector drawLine(int x0, int y0, int x1, int y1, int blockSize) {
+		math::Vector segment(blockSize * blockSize);
+		int dx = abs(x1 - x0);
+		int sx = x0 < x1 ? 1 : -1;
+		int dy = -abs(y1 - y0);
+		int sy = y0 < y1 ? 1 : -1;
+		int error = dx + dy;
+
+		while (true) {
+			if (x0 >= 0
+				&& x0 < blockSize
+				&& y0 >= 0
+				&& y0 < blockSize) {
+				segment[x0 + y0 * blockSize] = 255.0 / blockSize;
+			}
+			if (x0 == x1 && y0 == y1) {
+				break;
+			}
+			int e2 = 2 * error;
+			if (e2 >= dy) {
+				if (x0 == x1) {
+					break;
+				}
+				error = error + dy;
+				x0 = x0 + sx;
+			}
+			if (e2 <= dx) {
+				if (y0 == y1) {
+					break;
+				}
+				error = error + dx;
+				y0 = y0 + sy;
+			}
+		}
+		return segment;
+	}
+
+	math::Matrix createSeparatorDictionary(size_t blockSize, const std::vector<Line>& basisSet) {
+		math::Matrix dictionary(basisSet.size(), blockSize * blockSize);
+		for (int i = 0; i < basisSet.size(); ++i) {
+			math::Vector shape = drawLine(basisSet[i].a.x, basisSet[i].a.y, basisSet[i].b.x, basisSet[i].b.y, blockSize);
+			for (int j = 0; j < blockSize * blockSize; ++j) {
+				dictionary[i][j] = shape[j];
+			}
+		}
+		return dictionary;
+	}
+
 	Eigen::MatrixXf createSegmentDictionaryFast(size_t blockSize, const std::vector<Line>& basisSet) {
 		Eigen::MatrixXf dictionary(basisSet.size(), blockSize * blockSize);
 		const double sigma = 1.0;
