@@ -14,6 +14,10 @@ To clone the code use:
 
 Then just load the ImageExperiments.sln into visual studio.
 
+If you cloned, but forgot to pull the submodules use:
+
+```git submodule update --init --recursive```
+
 ## Data used for calibration
 To get hold of uncompressed images for calibration and test I used the files from the [RAISE project](http://loki.disi.unitn.it/RAISE/download.html) that had only lossless TIF compression applied.
 
